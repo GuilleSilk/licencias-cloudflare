@@ -9,6 +9,7 @@ function getCorsHeaders() {
 }
 
 export async function webhookTest(request, env) {
+  console.log(">> ENV vars:", env);
   const headers = getCorsHeaders();
   
   // Respuesta a preflight

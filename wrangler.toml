@@ -3,10 +3,10 @@ compatibility_date = "2025-06-18"
 main = "src/index.js"
 workers_dev = true  
 
-[env.production]
 services = [
   { binding = "LIC_SERVICE", service = "licencias-cloudflare" }
 ]
+
 [vars]
 GOOGLE_SHEET_ID = ""
 GOOGLE_API_KEY = ""

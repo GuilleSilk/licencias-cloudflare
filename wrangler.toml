@@ -3,11 +3,9 @@ compatibility_date = "2025-06-18"
 main = "src/index.js"
 workers_dev = true  
 
-services = [
-  { binding = "LIC_SERVICE", service = "licencias-cloudflare" }
-]
-
-[env.production]
+vars = {
+  LIC_SERVICE_URL = "https://licencias-cloudflare.storesilkify.workers.dev"
+}
 
 [vars]
 GOOGLE_SHEET_ID = ""

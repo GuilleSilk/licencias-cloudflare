@@ -1,25 +1,25 @@
-export async function webhookTest(request) {
-
-// Endpoint para probar el webhook - CON CORS
 // Función para añadir headers CORS
-function addCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res.setHeader("Access-Control-Max-Age", "86400")
+function getCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+  };
 }
 
-export default async function handler(req, res) {
-  // Añadir headers CORS a todas las respuestas
-  addCorsHeaders(res)
+// Función principal
+export async function webhookTest(request) {
+  const headers = getCorsHeaders();
 
-  // Manejar preflight request (OPTIONS)
-  if (req.method === "OPTIONS") {
-    return res.status(200).end()
+  // Manejar preflight (OPTIONS)
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers });
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
+  // Solo permitir POST
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }
 
   // Datos de prueba que simula un webhook de Shopify
@@ -44,31 +44,30 @@ export default async function handler(req, res) {
     billing_address: {
       company: "Mi Tienda Online",
     },
-  }
+  };
 
   try {
-    // Llamar al endpoint de generación de licencias
-    const response = await fetch(`https://${req.headers.host}/api/generate-license`, {
+    // Llamar al endpoint de generación de licencias dentro del mismo Worker
+    const response = await fetch(`https://licencias-cloudflare.workers.dev/generate-license`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(testWebhookData),
-    })
+    });
 
-    const result = await response.json()
+    const result = await response.json();
 
-    return res.json({
+    return new Response(JSON.stringify({
       success: true,
       message: "Webhook de prueba ejecutado",
       result,
-    })
+    }), { status: 200, headers });
   } catch (error) {
-    return res.status(500).json({
+    console.error("Error en webhook test:", error);
+    return new Response(JSON.stringify({
       success: false,
       error: error.message,
-    })
+    }), { status: 500, headers });
   }
-}
-return new Response('Webhook Test Correcto', { status: 200 });
 }

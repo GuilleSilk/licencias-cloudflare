@@ -1,3 +1,4 @@
+export async function validateLicense(request) {
 import { GoogleSpreadsheet } from "google-spreadsheet"
 import { JWT } from "google-auth-library"
 
@@ -108,4 +109,6 @@ export default async function handler(req, res) {
     console.error("Error validating license:", error)
     return res.status(500).json({ valid: false, error: "Error interno del servidor" })
   }
+}
+return new Response('Licencia validada', { status: 200 });
 }

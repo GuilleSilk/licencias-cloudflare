@@ -1,4 +1,15 @@
 export async function webhookTest(request) {
+// Definición de la función getCorsHeaders que faltaba
+function getCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Test-Webhook",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+export async function webhookTest(request) {
   console.log("Request received:", request.url);
   const headers = getCorsHeaders();
 
@@ -34,16 +45,20 @@ export async function webhookTest(request) {
   };
 
   try {
+    console.log("Enviando datos:", JSON.stringify(testWebhookData));
     const response = await fetch(`https://licencias-cloudflare.storesilkify.workers.dev/generate-license`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Test-Webhook": "true", // Indica que es una prueba
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
       },
       body: JSON.stringify(testWebhookData),
     });
 
+    console.log("Respuesta recibida:", response.status);
     const result = await response.json();
+    console.log("Resultado:", JSON.stringify(result));
 
     return new Response(JSON.stringify({
       success: true,
@@ -57,4 +72,6 @@ export async function webhookTest(request) {
       error: error.message,
     }), { status: 500, headers });
   }
+}
+
 }

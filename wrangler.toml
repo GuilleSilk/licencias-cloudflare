@@ -3,12 +3,11 @@ compatibility_date = "2025-06-18"
 main = "src/index.js"
 workers_dev = true  
 
-vars = {
-  LIC_SERVICE_URL = "https://licencias-cloudflare.storesilkify.workers.dev"
-}
+
 
 [vars]
 GOOGLE_SHEET_ID = ""
 GOOGLE_API_KEY = ""
 RESEND_API_KEY = ""
 FROM_EMAIL = ""
+LIC_SERVICE_URL = "https://licencias-cloudflare.storesilkify.workers.dev"

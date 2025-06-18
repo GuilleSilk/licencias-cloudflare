@@ -45,14 +45,13 @@ export async function webhookTest(request) {
 
   try {
     console.log("Enviando datos:", JSON.stringify(testWebhookData));
-    const response = await fetch(`https://licencias-cloudflare.storesilkify.workers.dev/generate-license`, {
+    const resp = await env.LIC_SERVICE.fetch("/generate-license", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Test-Webhook": "true", // Indica que es una prueba
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "X-Test-Webhook": "true"
       },
-      body: JSON.stringify(testWebhookData),
+      body: JSON.stringify(testWebhookData)
     });
 
     console.log("Respuesta recibida:", response.status);

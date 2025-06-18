@@ -50,8 +50,8 @@ export async function webhookTest(request, env) {
 
   try {
     // Llamada al servicio interno usando Service Binding
-    const resp = await env.LIC_SERVICE.fetch("/generate-license", {Add commentMore actions
-      method: "POST",
+ const resp = await env.LIC_SERVICE.fetch("/generate-license", {
+      method: "POST",Add commentMore actions
       headers: {
         "Content-Type": "application/json",
         "X-Test-Webhook": "true"

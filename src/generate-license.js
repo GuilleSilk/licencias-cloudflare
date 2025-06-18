@@ -1,3 +1,5 @@
+export default {
+  async fetch(request, env) {
 // Variables de entorno
 const SHEET_ID = env.GOOGLE_SHEET_ID;
 const GOOGLE_API_KEY = env.GOOGLE_API_KEY; // Reemplaza el service account con una API Key
@@ -351,3 +353,6 @@ export async function generateLicense(request) {
     }), { status: 500, headers });
   }
 }
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+  }
+};

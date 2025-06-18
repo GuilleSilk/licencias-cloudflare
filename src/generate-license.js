@@ -1,3 +1,13 @@
+function getCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Test-Webhook",
+    "Access-Control-Max-Age": "86400"
+  };
+}
+
+
 // Función para generar licencia aleatoria
 function generateLicenseKey() {
   const part1 = crypto.getRandomValues(new Uint8Array(2)).toString(16).toUpperCase();

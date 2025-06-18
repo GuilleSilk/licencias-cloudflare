@@ -1,28 +1,15 @@
-// Función para añadir headers CORS
-function getCorsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "86400",
-  };
-}
-
-// Función principal
 export async function webhookTest(request) {
+  console.log("Request received:", request.url);
   const headers = getCorsHeaders();
 
-  // Manejar preflight (OPTIONS)
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers });
   }
 
-  // Solo permitir POST
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }
 
-  // Datos de prueba que simula un webhook de Shopify
   const testWebhookData = {
     id: 12345,
     order_number: "TEST-001",
@@ -47,11 +34,11 @@ export async function webhookTest(request) {
   };
 
   try {
-    // Llamar al endpoint de generación de licencias dentro del mismo Worker
-    const response = await fetch(`https://licencias-cloudflare.workers.dev/generate-license`, {
+    const response = await fetch(`https://licencias-cloudflare.storesilkify.workers.dev/generate-license`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Test-Webhook": "true", // Indica que es una prueba
       },
       body: JSON.stringify(testWebhookData),
     });

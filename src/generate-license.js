@@ -1,3 +1,4 @@
+export async function generateLicense(request) {
 // API para generar licencias automáticamente - CON CORS
 import { GoogleSpreadsheet } from "google-spreadsheet"
 import { JWT } from "google-auth-library"
@@ -405,4 +406,6 @@ export default async function handler(req, res) {
       details: error.message,
     })
   }
+}
+return new Response('Licencia generada', { status: 200 });
 }

@@ -2,6 +2,7 @@ name = "licencias-cloudflare"
 compatibility_date = "2025-06-18"
 main = "src/index.js"
 workers_dev = true
+type = "module"    
 
 [vars]
 GOOGLE_SHEET_ID = ""

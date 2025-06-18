@@ -52,7 +52,7 @@ export async function webhookTest(request, env) {
   try {
     // Llamada al servicio interno usando Service Binding
 const resp = await fetch(
-  `${env.LIC_SERVICE_URL}/generate-license`,
+  "https://licencias-cloudflare.storesilkify.workers.dev/generate-license",
   {
     method: "POST",
     headers: {

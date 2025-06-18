@@ -1,114 +1,109 @@
-export async function validateLicense(request) {
-import { GoogleSpreadsheet } from "google-spreadsheet"
-import { JWT } from "google-auth-library"
-
-// Configuración de Google Sheets
-const SHEET_ID = process.env.GOOGLE_SHEET_ID
-const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
+// Variables de entorno
+const SHEET_ID = env.GOOGLE_SHEET_ID;
+const GOOGLE_API_KEY = env.GOOGLE_API_KEY; // Usa una API Key en lugar de service account
 
 // Función para añadir headers CORS
-function addCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res.setHeader("Access-Control-Allow-Max-Age", "86400")
+function getCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+  };
 }
 
-export default async function handler(req, res) {
-  // Añadir headers CORS a todas las respuestas
-  addCorsHeaders(res)
+// Función principal
+export async function validateLicense(request) {
+  const headers = getCorsHeaders();
 
-  // Manejar preflight request (OPTIONS)
-  if (req.method === "OPTIONS") {
-    return res.status(200).end()
+  // Manejar preflight (OPTIONS)
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers });
   }
 
   // Solo permitir POST
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }
 
   try {
-    const { licencia, hash_tienda, action } = req.body
+    const body = await request.json();
+    const { licencia, hash_tienda, action } = body;
 
     if (!licencia) {
-      return res.status(400).json({ valid: false, error: "Falta el parámetro licencia" })
+      return new Response(JSON.stringify({ valid: false, error: "Falta el parámetro licencia" }), { status: 400, headers });
     }
 
-    // Configurar autenticación con Google Sheets
-    const serviceAccountAuth = new JWT({
-      email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    })
+    // Simulación de consulta a Google Sheets con API REST
+    const googleSheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A:Z?key=${GOOGLE_API_KEY}`;
+    const response = await fetch(googleSheetsUrl);
+    const data = await response.json();
+    const rows = data.values || [];
 
-    // Conectar a Google Sheets
-    const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth)
-    await doc.loadInfo()
-
-    const sheet = doc.sheetsByTitle["Licencias"]
-    if (!sheet) {
-      return res.status(500).json({ valid: false, error: "Hoja de licencias no encontrada" })
-    }
-
-    // Obtener todas las filas
-    const rows = await sheet.getRows()
-
-    // Buscar la licencia - SÚPER SIMPLE
-    const licenseRow = rows.find((row) => row.get("licencia") === licencia)
+    // Buscar la licencia
+    const licenseRow = rows.find(row => row[3] === licencia); // Asume que "licencia" está en la columna D (índice 3)
 
     if (!licenseRow) {
-      return res.status(404).json({ valid: false, error: "Licencia no encontrada" })
+      return new Response(JSON.stringify({ valid: false, error: "Licencia no encontrada" }), { status: 404, headers });
     }
 
+    const [order_number, customer_email, customer_name, licencia_value, hash_tienda_value, license_number, status, ultima_verificacion, fecha_creacion, order_total, currency] = licenseRow;
+
     // Fecha actual YYYY-MM-DD
-    const today = new Date().toISOString().split("T")[0]
+    const today = new Date().toISOString().split("T")[0];
 
     // Acción: clear libera la licencia
     if (action === 'clear') {
-      licenseRow.set("hash_tienda", "")
-      licenseRow.set("status", "inactiva")
-      licenseRow.set("última_verificación", today)
-      await licenseRow.save()
-      return res.json({ valid: true, message: "Licencia liberada" })
+      const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A${rows.indexOf(licenseRow) + 2}:Z${rows.indexOf(licenseRow) + 2}?valueInputOption=USER_ENTERED&key=${GOOGLE_API_KEY}`;
+      await fetch(updateUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          values: [[order_number, customer_email, customer_name, licencia_value, "", license_number, "inactiva", today, fecha_creacion, order_total, currency]],
+        }),
+      });
+      return new Response(JSON.stringify({ valid: true, message: "Licencia liberada" }), { status: 200, headers });
     }
 
     // Validación por defecto
     if (!hash_tienda) {
-      return res.status(400).json({ valid: false, error: "Falta el parámetro hash_tienda" })
+      return new Response(JSON.stringify({ valid: false, error: "Falta el parámetro hash_tienda" }), { status: 400, headers });
     }
 
-    const currentStatus = licenseRow.get("status")
-    const currentHashTienda = licenseRow.get("hash_tienda")
+    const currentStatus = status;
+    const currentHashTienda = hash_tienda_value;
 
     // Si la licencia ya está inválida
     if (currentStatus === "inválida") {
-      return res.json({ valid: false, error: "Licencia inválida" })
+      return new Response(JSON.stringify({ valid: false, error: "Licencia inválida" }), { status: 200, headers });
     }
 
     // Si ya hay un hash y es diferente al actual (licencia en uso)
     if (currentHashTienda && currentHashTienda !== hash_tienda) {
-      // Invalidar la licencia y devolver mensaje con HTML para showError
-      licenseRow.set("status", "inválida")
-      licenseRow.set("última_verificación", today)
-      await licenseRow.save()
-      return res
-        .status(409)
-        .json({ valid: false, error: "duplicada" })
+      const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A${rows.indexOf(licenseRow) + 2}:Z${rows.indexOf(licenseRow) + 2}?valueInputOption=USER_ENTERED&key=${GOOGLE_API_KEY}`;
+      await fetch(updateUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          values: [[order_number, customer_email, customer_name, licencia_value, currentHashTienda, license_number, "inválida", today, fecha_creacion, order_total, currency]],
+        }),
+      });
+      return new Response(JSON.stringify({ valid: false, error: "duplicada" }), { status: 409, headers });
     }
 
     // Actualizar la licencia con el hash actual
-    licenseRow.set("hash_tienda", hash_tienda)
-    licenseRow.set("status", "activa")
-    licenseRow.set("última_verificación", today)
-    await licenseRow.save()
+    const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A${rows.indexOf(licenseRow) + 2}:Z${rows.indexOf(licenseRow) + 2}?valueInputOption=USER_ENTERED&key=${GOOGLE_API_KEY}`;
+    await fetch(updateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        values: [[order_number, customer_email, customer_name, licencia_value, hash_tienda, license_number, "activa", today, fecha_creacion, order_total, currency]],
+      }),
+    });
 
-    return res.json({ valid: true, message: "Licencia válida" })
+    return new Response(JSON.stringify({ valid: true, message: "Licencia válida" }), { status: 200, headers });
   } catch (error) {
-    console.error("Error validating license:", error)
-    return res.status(500).json({ valid: false, error: "Error interno del servidor" })
+    console.error("Error validating license:", error);
+    return new Response(JSON.stringify({ valid: false, error: "Error interno del servidor" }), { status: 500, headers });
   }
-}
-return new Response('Licencia validada', { status: 200 });
 }

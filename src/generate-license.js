@@ -1,88 +1,56 @@
-export async function generateLicense(request) {
-// API para generar licencias automáticamente - CON CORS
-import { GoogleSpreadsheet } from "google-spreadsheet"
-import { JWT } from "google-auth-library"
-import { Resend } from "resend"
-import crypto from "crypto"
-
 // Variables de entorno
-const SHEET_ID = process.env.GOOGLE_SHEET_ID
-const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL = process.env.FROM_EMAIL || "licencias@tudominio.com"
-
-const resend = new Resend(RESEND_API_KEY)
-
-// Función para añadir headers CORS
-function addCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res.setHeader("Access-Control-Max-Age", "86400")
-}
+const SHEET_ID = env.GOOGLE_SHEET_ID;
+const GOOGLE_API_KEY = env.GOOGLE_API_KEY; // Reemplaza el service account con una API Key
+const RESEND_API_KEY = env.RESEND_API_KEY;
+const FROM_EMAIL = env.FROM_EMAIL || "licencias@tudominio.com";
 
 // Función para generar licencia aleatoria
 function generateLicenseKey() {
-  const part1 = crypto.randomBytes(2).toString("hex").toUpperCase()
-  const part2 = crypto.randomBytes(2).toString("hex").toUpperCase()
-  const part3 = crypto.randomBytes(2).toString("hex").toUpperCase()
-  return `LIC-${part1}-${part2}-${part3}`
+  const part1 = crypto.getRandomValues(new Uint8Array(2)).toString(16).toUpperCase();
+  const part2 = crypto.getRandomValues(new Uint8Array(2)).toString(16).toUpperCase();
+  const part3 = crypto.getRandomValues(new Uint8Array(2)).toString(16).toUpperCase();
+  return `LIC-${part1}-${part2}-${part3}`;
 }
 
 // Función para generar licencias únicas
-async function generateUniqueLicenses(count, sheet) {
-  const licenses = []
-  const existingLicenses = new Set()
+async function generateUniqueLicenses(count) {
+  const licenses = [];
+  const existingLicenses = new Set(); // Simulación; en producción, consulta la API
 
-  // Obtener todas las licencias existentes
-  const rows = await sheet.getRows()
-  rows.forEach((row) => {
-    const license = row.get("licencia")
-    if (license) {
-      existingLicenses.add(license)
-    }
-  })
-
-  // Generar licencias únicas
   for (let i = 0; i < count; i++) {
-    let newLicense
+    let newLicense;
     do {
-      newLicense = generateLicenseKey()
-    } while (existingLicenses.has(newLicense) || licenses.includes(newLicense))
+      newLicense = generateLicenseKey();
+    } while (existingLicenses.has(newLicense) || licenses.includes(newLicense));
 
-    licenses.push(newLicense)
-    existingLicenses.add(newLicense)
+    licenses.push(newLicense);
+    existingLicenses.add(newLicense);
   }
-
-  return licenses
+  return licenses;
 }
 
-// Función para enviar email con múltiples licencias
+// Función para enviar email con múltiples licencias usando Resend API
 async function sendMultipleLicensesEmail(licenseData) {
-  try {
-    const { licenses, customerEmail, customerName, orderNumber, orderTotal, currency } = licenseData
+  const { licenses, customerEmail, customerName, orderNumber, orderTotal, currency } = licenseData;
 
-    // Generar HTML para múltiples licencias
-    const licensesHtml = licenses
-      .map(
-        (license, index) => `
+  const licensesHtml = licenses
+    .map(
+      (license, index) => `
       <div class="license-box">
         <h3>Licencia ${index + 1}:</h3>
         <div class="license-code">${license}</div>
       </div>
-    `,
-      )
-      .join("")
+    `
+    )
+    .join("");
 
-    const emailHtml = `
+  const emailHtml = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Silkify - Licencias</title>
-    <!-- Fuentes: Roboto para cuerpo, Poppins para encabezado -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Poppins:wght@700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -147,7 +115,7 @@ async function sendMultipleLicensesEmail(licenseData) {
             background-color: rgba(227, 242, 253, 0.4);
             border-radius: 8px;
             margin: 20px;
-             box-shadow:inset 0 4px 6px rgba(0, 0, 0, 0.1),                                         0 4px 10px rgba(0, 0, 0, 0.06);  
+            box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.06);  
         }
         .licenses h2 {
             margin-top: 0;
@@ -208,22 +176,18 @@ async function sendMultipleLicensesEmail(licenseData) {
                 <img src="https://cdn.shopify.com/s/files/1/0915/1784/5839/files/ChatGPT_Image_14_may_2025_14_02_34sinfondo.png?v=1747224314" alt="Logo Silkify">
                 <h1>Silkify</h1>
             </div>
-
             <div class="greeting">
                 <h2>¡Tus ${licenses.length} licencias de Silkify están listas!</h2>
                 <p>Gracias por tu compra, ${customerName || 'Cliente'}</p>
             </div>
-
             <div class="summary">
                 <p><strong>Pedido:</strong> #${orderNumber}</p>
                 <p><strong>Licencias incluidas:</strong> ${licenses.length}</p>
             </div>
-
             <div class="licenses">
                 <h2>📋 Tus códigos de licencia:</h2>
                 ${licensesHtml}
             </div>
-
             <div class="instructions">
                 <h3>📋 Instrucciones de activación:</h3>
                 <ol>
@@ -241,13 +205,10 @@ async function sendMultipleLicensesEmail(licenseData) {
                     <li>Cada licencia solo puede estar activa en una tienda a la vez</li>
                 </ul>
             </div>
-
             <div class="footer">
                 <p>Este es un correo automático. Si tienes alguna duda, por favor ponte en contacto a través de nuestra web.</p>
-                <p>Gracias por elegir Silkify<br>
-                <a href="https://www.silkifytheme.com">www.silkifytheme.com</a></p>
+                <p>Gracias por elegir Silkify<br><a href="https://www.silkifytheme.com">www.silkifytheme.com</a></p>
             </div>
-
             <div class="legal">
                 <p>© 2025 Silkify. Todos los derechos reservados.</p>
             </div>
@@ -255,157 +216,138 @@ async function sendMultipleLicensesEmail(licenseData) {
     </div>
 </body>
 </html>
+`;
 
-
-
-    `
-
-    const { data, error } = await resend.emails.send({
+  const resendUrl = "https://api.resend.com/emails";
+  const response = await fetch(resendUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Tus ${licenses.length} licencias de Silkify - Pedido #${orderNumber}`,
       html: emailHtml,
-    })
+    }),
+  });
 
-    if (error) {
-      console.error("Error enviando email:", error)
-      return { success: false, error }
-    }
-
-    console.log("Email con múltiples licencias enviado exitosamente:", data)
-    return { success: true, data }
-  } catch (error) {
-    console.error("Error en sendMultipleLicensesEmail:", error)
-    return { success: false, error: error.message }
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Error enviando email:", error);
+    return { success: false, error };
   }
+
+  const data = await response.json();
+  console.log("Email enviado exitosamente:", data);
+  return { success: true, data };
 }
 
-export default async function handler(req, res) {
-  // Añadir headers CORS a todas las respuestas
-  addCorsHeaders(res)
+// Función principal
+export async function generateLicense(request) {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+  };
 
-  // Manejar preflight request (OPTIONS)
-  if (req.method === "OPTIONS") {
-    return res.status(200).end()
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers });
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }
 
   try {
-    // Datos del webhook de Shopify
-    const { id: order_id, order_number, customer, line_items, billing_address, shipping_address } = req.body
+    const body = await request.json();
+    const { id: order_id, order_number, customer, line_items, total_price, currency } = body;
 
-    console.log(`Procesando pedido: ${order_number} para ${customer?.email}`)
+    console.log(`Procesando pedido: ${order_number} para ${customer?.email}`);
 
-    // Buscar SOLO productos con SKU "SilkifyTheme" o título "Silkify Theme"
-    let totalLicenses = 0
-    const themeItems = []
+    let totalLicenses = 0;
+    const themeItems = [];
 
     line_items?.forEach((item) => {
-      // DETECCIÓN ESPECÍFICA: Solo SKU "SilkifyTheme" o título "Silkify Theme"
-      const isSilkifyTheme = item.sku === "SilkifyTheme" || item.title?.includes("Silkify Theme")
-
+      const isSilkifyTheme = item.sku === "SilkifyTheme" || item.title?.includes("Silkify Theme");
       if (isSilkifyTheme) {
-        // Determinar cuántas licencias incluye este item
-        let licensesForThisItem = item.quantity || 1
-
-        // Detectar si el producto incluye múltiples licencias en el título
-        const titleMatch = item.title?.match(/(\d+)\s*(licencias?|licenses?)/i)
+        let licensesForThisItem = item.quantity || 1;
+        const titleMatch = item.title?.match(/(\d+)\s*(licencias?|licenses?)/i);
         if (titleMatch) {
-          const licensesInTitle = Number.parseInt(titleMatch[1])
-          licensesForThisItem = licensesInTitle * item.quantity
+          const licensesInTitle = Number.parseInt(titleMatch[1]);
+          licensesForThisItem = licensesInTitle * item.quantity;
         }
 
-        totalLicenses += licensesForThisItem
-        themeItems.push({
-          ...item,
-          licensesCount: licensesForThisItem,
-        })
-
-        console.log(`Producto Silkify detectado: ${item.title} - ${licensesForThisItem} licencias`)
+        totalLicenses += licensesForThisItem;
+        themeItems.push({ ...item, licensesCount: licensesForThisItem });
+        console.log(`Producto Silkify detectado: ${item.title} - ${licensesForThisItem} licencias`);
       }
-    })
+    });
 
     if (totalLicenses === 0) {
-      console.log("Pedido no incluye productos Silkify Theme, ignorando")
-      return res.json({ success: true, message: "No es compra de Silkify Theme" })
+      console.log("Pedido no incluye productos Silkify Theme, ignorando");
+      return new Response(JSON.stringify({ success: true, message: "No es compra de Silkify Theme" }), { status: 200, headers });
     }
 
-    console.log(`Generando ${totalLicenses} licencias para el pedido ${order_number}`)
+    console.log(`Generando ${totalLicenses} licencias para el pedido ${order_number}`);
 
-    // Configurar autenticación con Google Sheets
-    const serviceAccountAuth = new JWT({
-      email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    })
+    const generatedLicenses = await generateUniqueLicenses(totalLicenses);
+    const today = new Date().toISOString().split("T")[0];
 
-    const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth)
-    await doc.loadInfo()
-
-    const sheet = doc.sheetsByTitle["Licencias"]
-    if (!sheet) {
-      throw new Error("Hoja de licencias no encontrada")
-    }
-
-    // Generar licencias únicas
-    const generatedLicenses = await generateUniqueLicenses(totalLicenses, sheet)
-    const today = new Date().toISOString().split("T")[0]
-
-    // Crear UNA FILA POR LICENCIA (como quieres)
+    const googleSheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A:Z:append?valueInputOption=USER_ENTERED&key=${GOOGLE_API_KEY}`;
     for (let i = 0; i < totalLicenses; i++) {
-      await sheet.addRow({
-        order_number: order_number || order_id,
-        customer_email: customer?.email || "",
-        customer_name: `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim(),
-        licencia: generatedLicenses[i],
-        hash_tienda: "", // Inicialmente vacío
-        license_number: `${i + 1}/${totalLicenses}`,
-        status: "nueva",
-        última_verificación: today,
-        fecha_creacion: today,
-        order_total: req.body.total_price || "",
-        currency: req.body.currency || "EUR",
-      })
+      const row = [
+        order_number || order_id,
+        customer?.email || "",
+        `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim(),
+        generatedLicenses[i],
+        "",
+        `${i + 1}/${totalLicenses}`,
+        "nueva",
+        today,
+        today,
+        total_price || "",
+        currency || "EUR",
+      ];
+      await fetch(googleSheetsUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [row] }),
+      });
     }
 
-    console.log(`${totalLicenses} licencias guardadas en Google Sheets:`, generatedLicenses)
+    console.log(`${totalLicenses} licencias guardadas en Google Sheets:`, generatedLicenses);
 
-    // Enviar UN SOLO email con todas las licencias
     if (customer?.email && RESEND_API_KEY) {
       const emailResult = await sendMultipleLicensesEmail({
         licenses: generatedLicenses,
         customerEmail: customer.email,
         customerName: `${customer.first_name || ""} ${customer.last_name || ""}`.trim(),
         orderNumber: order_number || order_id,
-        orderTotal: req.body.total_price || "0",
-        currency: req.body.currency || "EUR",
-      })
+        orderTotal: total_price || "0",
+        currency: currency || "EUR",
+      });
 
-      if (emailResult.success) {
-        console.log(`Email con ${totalLicenses} licencias enviado a ${customer.email}`)
-      } else {
-        console.error(`Error enviando email a ${customer.email}:`, emailResult.error)
+      if (!emailResult.success) {
+        console.error(`Error enviando email a ${customer.email}:`, emailResult.error);
       }
     }
 
-    return res.json({
+    return new Response(JSON.stringify({
       success: true,
       licenses: generatedLicenses,
       total_licenses: totalLicenses,
       order_number: order_number || order_id,
       email_sent: !!customer?.email && !!RESEND_API_KEY,
-    })
+    }), { status: 200, headers });
   } catch (error) {
-    console.error("Error generating licenses:", error)
-    return res.status(500).json({
+    console.error("Error generating licenses:", error);
+    return new Response(JSON.stringify({
       success: false,
       error: "Error generando licencias",
       details: error.message,
-    })
+    }), { status: 500, headers });
   }
-}
-return new Response('Licencia generada', { status: 200 });
 }

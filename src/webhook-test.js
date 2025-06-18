@@ -1,3 +1,5 @@
+export async function webhookTest(request) {
+
 // Endpoint para probar el webhook - CON CORS
 // Función para añadir headers CORS
 function addCorsHeaders(res) {
@@ -67,4 +69,6 @@ export default async function handler(req, res) {
       error: error.message,
     })
   }
+}
+return new Response('Webhook Test Correcto', { status: 200 });
 }

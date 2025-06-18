@@ -2,3 +2,9 @@ name = "licencias-cloudflare"
 compatibility_date = "2025-06-18"
 main = "src/index.js"
 workers_dev = true
+
+[vars]
+GOOGLE_SHEET_ID = ""
+GOOGLE_API_KEY = ""
+RESEND_API_KEY = ""
+FROM_EMAIL = ""

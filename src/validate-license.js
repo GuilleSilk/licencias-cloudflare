@@ -1,7 +1,3 @@
-// Variables de entorno
-const SHEET_ID = env.GOOGLE_SHEET_ID;
-const GOOGLE_API_KEY = env.GOOGLE_API_KEY; // Usa una API Key en lugar de service account
-
 // Función para añadir headers CORS
 function getCorsHeaders() {
   return {
@@ -21,7 +17,10 @@ export async function validateLicense(request) {
     return new Response(null, { status: 200, headers });
   }
 
-  // Solo permitir POST
+  // Acceder a las variables de entorno dentro de la función
+  const SHEET_ID = env.GOOGLE_SHEET_ID;
+  const GOOGLE_API_KEY = env.GOOGLE_API_KEY;
+
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }

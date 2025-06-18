@@ -1,11 +1,3 @@
-export default {
-  async fetch(request, env) {
-// Variables de entorno
-const SHEET_ID = env.GOOGLE_SHEET_ID;
-const GOOGLE_API_KEY = env.GOOGLE_API_KEY; // Reemplaza el service account con una API Key
-const RESEND_API_KEY = env.RESEND_API_KEY;
-const FROM_EMAIL = env.FROM_EMAIL || "licencias@tudominio.com";
-
 // Función para generar licencia aleatoria
 function generateLicenseKey() {
   const part1 = crypto.getRandomValues(new Uint8Array(2)).toString(16).toUpperCase();
@@ -17,7 +9,7 @@ function generateLicenseKey() {
 // Función para generar licencias únicas
 async function generateUniqueLicenses(count) {
   const licenses = [];
-  const existingLicenses = new Set(); // Simulación; en producción, consulta la API
+  const existingLicenses = new Set();
 
   for (let i = 0; i < count; i++) {
     let newLicense;
@@ -32,7 +24,7 @@ async function generateUniqueLicenses(count) {
 }
 
 // Función para enviar email con múltiples licencias usando Resend API
-async function sendMultipleLicensesEmail(licenseData) {
+async function sendMultipleLicensesEmail(licenseData, RESEND_API_KEY, FROM_EMAIL) {
   const { licenses, customerEmail, customerName, orderNumber, orderTotal, currency } = licenseData;
 
   const licensesHtml = licenses
@@ -55,120 +47,28 @@ async function sendMultipleLicensesEmail(licenseData) {
     <title>Silkify - Licencias</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Poppins:wght@700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Roboto', Arial, sans-serif;
-            background-color: #f4f6f8;
-            color: #333;
-            margin: 0;
-            padding: 0;
-        }
-        .wrapper {
-            width: 100%;
-            padding: 20px 0;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .header {
-            background-color: #ffffff;
-            display: flex;
-            align-items: center;
-            padding: 30px;
-        }
-        .header img {
-            max-width: 100px;
-            margin-right: 15px;
-        }
-        .header h1 {
-            margin: 0;
-            font-family: 'Poppins', sans-serif;
-            font-size: 32px;
-            font-weight: 700;
-            color: #000;
-        }
-        .greeting {
-            padding: 0 30px 30px;
-        }
-        .greeting h2 {
-            font-size: 20px;
-            margin: 0 0 10px;
-            text-align: center;
-        }
-        .greeting p {
-            margin: 0;
-            font-size: 16px;
-            text-align: center;
-        }
-        .summary {
-            padding: 20px;
-            background-color: #ffffff;
-        }
-        .summary p {
-            margin: 8px 0;
-            font-size: 15px;
-        }
-        .licenses {
-            padding: 20px;
-            background-color: rgba(227, 242, 253, 0.4);
-            border-radius: 8px;
-            margin: 20px;
-            box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.06);  
-        }
-        .licenses h2 {
-            margin-top: 0;
-        }
-        .license-box {
-            max-width: 80%;
-            margin: 15px auto;
-            padding: 15px;
-            background-color: rgba(227, 242, 253, 0.8);
-            border-radius: 12px;
-            text-align: center;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-        }
-        .license-code {
-            font-size: 18px;
-            font-weight: 700;
-            color: #0d47a1;
-            letter-spacing: 2px;
-            margin: 0;
-        }
-        .instructions {
-            padding: 20px;
-            background-color: #ffffff;
-        }
-        .instructions h3 {
-            margin-top: 0;
-            font-size: 18px;
-        }
-        .instructions ol, .instructions ul {
-            margin: 10px 0 10px 20px;
-        }
-        .instructions li {
-            margin: 6px 0;
-        }
-        .footer {
-            text-align: center;
-            padding: 15px 20px;
-            font-size: 13px;
-            color: #888;
-        }
-        .footer a {
-            color: #1976d2;
-            text-decoration: none;
-        }
-        .legal {
-            text-align: center;
-            font-size: 12px;
-            color: #888;
-            padding: 10px 20px;
-            background-color: #ffffff;
-        }
+        body { font-family: 'Roboto', Arial, sans-serif; background-color: #f4f6f8; color: #333; margin: 0; padding: 0; }
+        .wrapper { width: 100%; padding: 20px 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background-color: #ffffff; display: flex; align-items: center; padding: 30px; }
+        .header img { max-width: 100px; margin-right: 15px; }
+        .header h1 { margin: 0; font-family: 'Poppins', sans-serif; font-size: 32px; font-weight: 700; color: #000; }
+        .greeting { padding: 0 30px 30px; }
+        .greeting h2 { font-size: 20px; margin: 0 0 10px; text-align: center; }
+        .greeting p { margin: 0; font-size: 16px; text-align: center; }
+        .summary { padding: 20px; background-color: #ffffff; }
+        .summary p { margin: 8px 0; font-size: 15px; }
+        .licenses { padding: 20px; background-color: rgba(227, 242, 253, 0.4); border-radius: 8px; margin: 20px; box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.06); }
+        .licenses h2 { margin-top: 0; }
+        .license-box { max-width: 80%; margin: 15px auto; padding: 15px; background-color: rgba(227, 242, 253, 0.8); border-radius: 12px; text-align: center; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+        .license-code { font-size: 18px; font-weight: 700; color: #0d47a1; letter-spacing: 2px; margin: 0; }
+        .instructions { padding: 20px; background-color: #ffffff; }
+        .instructions h3 { margin-top: 0; font-size: 18px; }
+        .instructions ol, .instructions ul { margin: 10px 0 10px 20px; }
+        .instructions li { margin: 6px 0; }
+        .footer { text-align: center; padding: 15px 20px; font-size: 13px; color: #888; }
+        .footer a { color: #1976d2; text-decoration: none; }
+        .legal { text-align: center; font-size: 12px; color: #888; padding: 10px 20px; background-color: #ffffff; }
     </style>
 </head>
 <body>
@@ -246,7 +146,7 @@ async function sendMultipleLicensesEmail(licenseData) {
   return { success: true, data };
 }
 
-// Función principal
+// Función principal para manejar el webhook de Shopify
 export async function generateLicense(request) {
   const headers = {
     "Access-Control-Allow-Origin": "*",
@@ -255,6 +155,7 @@ export async function generateLicense(request) {
     "Access-Control-Max-Age": "86400",
   };
 
+  // Manejar preflight (OPTIONS)
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers });
   }
@@ -263,11 +164,17 @@ export async function generateLicense(request) {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers });
   }
 
+  // Acceder a las variables de entorno dentro de la función
+  const SHEET_ID = env.GOOGLE_SHEET_ID;
+  const GOOGLE_API_KEY = env.GOOGLE_API_KEY;
+  const RESEND_API_KEY = env.RESEND_API_KEY;
+  const FROM_EMAIL = env.FROM_EMAIL || "licencias@tudominio.com";
+
   try {
     const body = await request.json();
-    const { id: order_id, order_number, customer, line_items, total_price, currency } = body;
+    const { id: order_id, order_number, customer, line_items, total_price, currency, billing_address } = body;
 
-    console.log(`Procesando pedido: ${order_number} para ${customer?.email}`);
+    console.log(`Procesando webhook de Shopify - Pedido: ${order_number} para ${customer?.email}`);
 
     let totalLicenses = 0;
     const themeItems = [];
@@ -330,7 +237,7 @@ export async function generateLicense(request) {
         orderNumber: order_number || order_id,
         orderTotal: total_price || "0",
         currency: currency || "EUR",
-      });
+      }, RESEND_API_KEY, FROM_EMAIL);
 
       if (!emailResult.success) {
         console.error(`Error enviando email a ${customer.email}:`, emailResult.error);
@@ -345,14 +252,11 @@ export async function generateLicense(request) {
       email_sent: !!customer?.email && !!RESEND_API_KEY,
     }), { status: 200, headers });
   } catch (error) {
-    console.error("Error generating licenses:", error);
+    console.error("Error processing Shopify webhook:", error);
     return new Response(JSON.stringify({
       success: false,
-      error: "Error generando licencias",
+      error: "Error procesando el webhook",
       details: error.message,
     }), { status: 500, headers });
   }
 }
-        return new Response(JSON.stringify({ success: true }), { status: 200 });
-  }
-};

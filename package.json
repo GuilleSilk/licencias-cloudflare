@@ -2,12 +2,5 @@
   "name": "licencias",
   "version": "1.0.0",
   "description": "Proyecto de licencias en Cloudflare Workers",
-  "main": "src/index.js",
-  "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
-  },
-  "devDependencies": {
-    "@cloudflare/wrangler": "^3.0.0"
-  }
+  "main": "src/index.js"
 }

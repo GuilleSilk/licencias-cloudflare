@@ -9,7 +9,7 @@ function getCorsHeaders() {
 }
 
 // Función principal
-export async function validateLicense(request) {
+export async function validateLicense(request, env) {
   const headers = getCorsHeaders();
 
   // Manejar preflight (OPTIONS)

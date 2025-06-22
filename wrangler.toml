@@ -41,3 +41,4 @@ bhA1ccImpuX/qbNeLpPrHpQLQA==
 RESEND_API_KEY = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
 FROM_EMAIL = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
 LIC_SERVICE_URL = "https://licencias-cloudflare.storesilkify.workers.dev"
+GOOGLE_API_KEY = "AIzaSyC817vRsFtaiBdFgP_S4Xwk4VYT_N3rdrY"

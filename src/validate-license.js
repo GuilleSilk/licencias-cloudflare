@@ -1,4 +1,4 @@
-
+// Función para normalizar hashes de tienda
 function normalizeHash(hash) {
   if (!hash) return hash
 
@@ -11,21 +11,6 @@ function normalizeHash(hash) {
   // Remover protocolo y puerto si existen
   return hash.replace(/^https?:\/\//, "").split(":")[0]
 }
-
-// En la función validateLicense, antes de buscar la licencia:
-const hash_tienda = "" // Declare hash_tienda
-const currentHash = "" // Declare currentHash
-const normalizedHashTienda = normalizeHash(hash_tienda)
-const normalizedCurrentHash = normalizeHash(currentHash)
-
-console.log("🔧 Hash normalizado enviado:", normalizedHashTienda)
-console.log("🔧 Hash normalizado actual:", normalizedCurrentHash)
-
-// Usar los hashes normalizados en las comparaciones:
-if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
-  // ... resto de la lógica
-
-
 
 export async function validateLicense(request, env) {
   const corsHeaders = {
@@ -132,7 +117,16 @@ export async function validateLicense(request, env) {
     const currentHash = licenseRow[hashCol] || ""
     const today = new Date().toISOString().split("T")[0]
 
-    // 5. LÓGICA DE VALIDACIÓN CORREGIDA
+    // 5. NORMALIZAR HASHES ANTES DE COMPARAR
+    const normalizedHashTienda = normalizeHash(hash_tienda)
+    const normalizedCurrentHash = normalizeHash(currentHash)
+
+    console.log("🔧 Hash enviado original:", hash_tienda)
+    console.log("🔧 Hash enviado normalizado:", normalizedHashTienda)
+    console.log("🔧 Hash actual original:", currentHash)
+    console.log("🔧 Hash actual normalizado:", normalizedCurrentHash)
+
+    // 6. LÓGICA DE VALIDACIÓN CON HASHES NORMALIZADOS
 
     // Acción: clear (liberar licencia para otra tienda)
     if (action === "clear") {
@@ -184,8 +178,8 @@ export async function validateLicense(request, env) {
       )
     }
 
-    // Si ya tiene un hash diferente, marcar como INACTIVA
-    if (currentHash && currentHash !== hash_tienda) {
+    // USAR HASHES NORMALIZADOS EN LA COMPARACIÓN
+    if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
       await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
         status: "inactiva",
         última_verificación: today,
@@ -198,14 +192,18 @@ export async function validateLicense(request, env) {
           error: "Licencia en uso en otra tienda",
           status: "inactiva",
           message: "Esta licencia está siendo usada en otra tienda y ha sido desactivada",
+          debug: {
+            currentHashNormalized: normalizedCurrentHash,
+            sentHashNormalized: normalizedHashTienda,
+          },
         }),
         { status: 409, headers: corsHeaders },
       )
     }
 
-    // Si no tiene hash (libre) o tiene el mismo hash, activar/mantener activa
+    // Si no tiene hash (libre) o tiene el mismo hash normalizado, activar/mantener activa
     await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
-      hash_tienda: hash_tienda,
+      hash_tienda: normalizedHashTienda, // Guardar el hash normalizado
       status: "activa",
       última_verificación: today,
     })
@@ -217,8 +215,12 @@ export async function validateLicense(request, env) {
         status: "activa",
         licenseInfo: {
           licencia,
-          hash_tienda,
+          hash_tienda: normalizedHashTienda,
           ultima_verificacion: today,
+        },
+        debug: {
+          originalHash: hash_tienda,
+          normalizedHash: normalizedHashTienda,
         },
       }),
       { status: 200, headers: corsHeaders },
@@ -234,7 +236,7 @@ export async function validateLicense(request, env) {
   }
 }
 
-// Resto del código igual...
+// Resto de funciones auxiliares...
 async function updateLicenseRow(sheetId, accessToken, rowIndex, headers, updates) {
   const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A${rowIndex}:Z${rowIndex}`
   const readResponse = await fetch(readUrl, {
@@ -321,4 +323,3 @@ function str2ab(str) {
   }
   return buf
 }
-  }

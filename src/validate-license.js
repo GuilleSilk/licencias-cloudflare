@@ -1,3 +1,32 @@
+
+function normalizeHash(hash) {
+  if (!hash) return hash
+
+  // Normalizar dominios de Shopify
+  if (hash.includes(".myshopify.com")) {
+    const shopName = hash.split(".myshopify.com")[0].split(".").pop()
+    return shopName + ".myshopify.com"
+  }
+
+  // Remover protocolo y puerto si existen
+  return hash.replace(/^https?:\/\//, "").split(":")[0]
+}
+
+// En la función validateLicense, antes de buscar la licencia:
+const hash_tienda = "" // Declare hash_tienda
+const currentHash = "" // Declare currentHash
+const normalizedHashTienda = normalizeHash(hash_tienda)
+const normalizedCurrentHash = normalizeHash(currentHash)
+
+console.log("🔧 Hash normalizado enviado:", normalizedHashTienda)
+console.log("🔧 Hash normalizado actual:", normalizedCurrentHash)
+
+// Usar los hashes normalizados en las comparaciones:
+if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
+  // ... resto de la lógica
+}
+
+
 export async function validateLicense(request, env) {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",

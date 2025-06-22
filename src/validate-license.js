@@ -1,124 +1,111 @@
-
-// Función para añadir headers CORS
-function getCorsHeaders() {
-  return {
+// Validador de licencias - exportación nombrada
+export async function validateLicense(request, env) {
+  // CORS headers
+  const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "86400",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
   }
-}
 
-// Validador de licencias simple y directo
-export default {
-  async fetch(request, env) {
-    // CORS headers
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+  // Manejar OPTIONS (preflight)
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders })
+  }
+
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Solo POST permitido" }), { status: 405, headers: corsHeaders })
+  }
+
+  try {
+    // 1. Obtener datos del request
+    const { licencia, hash_tienda, action } = await request.json()
+
+    if (!licencia) {
+      return new Response(JSON.stringify({ valid: false, error: "Falta licencia" }), {
+        status: 400,
+        headers: corsHeaders,
+      })
     }
 
-    // Manejar OPTIONS (preflight)
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 200, headers: corsHeaders })
+    // 2. Obtener token de Google
+    const token = await getGoogleToken(env)
+
+    // 3. Leer Google Sheets
+    const sheetData = await readGoogleSheet(env.GOOGLE_SHEET_ID, token)
+
+    // 4. Buscar la licencia
+    const licenseInfo = findLicense(sheetData, licencia)
+
+    if (!licenseInfo) {
+      return new Response(JSON.stringify({ valid: false, error: "Licencia no encontrada" }), {
+        status: 404,
+        headers: corsHeaders,
+      })
     }
 
-    if (request.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Solo POST permitido" }), { status: 405, headers: corsHeaders })
-    }
-
-    try {
-      // 1. Obtener datos del request
-      const { licencia, hash_tienda, action } = await request.json()
-
-      if (!licencia) {
-        return new Response(JSON.stringify({ valid: false, error: "Falta licencia" }), {
-          status: 400,
-          headers: corsHeaders,
-        })
-      }
-
-      // 2. Obtener token de Google
-      const token = await getGoogleToken(env)
-
-      // 3. Leer Google Sheets
-      const sheetData = await readGoogleSheet(env.GOOGLE_SHEET_ID, token)
-
-      // 4. Buscar la licencia
-      const licenseInfo = findLicense(sheetData, licencia)
-
-      if (!licenseInfo) {
-        return new Response(JSON.stringify({ valid: false, error: "Licencia no encontrada" }), {
-          status: 404,
-          headers: corsHeaders,
-        })
-      }
-
-      // 5. Procesar según la acción
-      if (action === "clear") {
-        // Liberar licencia
-        await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
-          hash_tienda: "",
-          status: "inactiva",
-          ultima_verificacion: getTodayDate(),
-        })
-
-        return new Response(JSON.stringify({ valid: true, message: "Licencia liberada" }), {
-          status: 200,
-          headers: corsHeaders,
-        })
-      }
-
-      // 6. Validación normal
-      if (!hash_tienda) {
-        return new Response(JSON.stringify({ valid: false, error: "Falta hash_tienda" }), {
-          status: 400,
-          headers: corsHeaders,
-        })
-      }
-
-      // Si ya está inválida
-      if (licenseInfo.status === "inválida") {
-        return new Response(JSON.stringify({ valid: false, error: "Licencia inválida" }), {
-          status: 200,
-          headers: corsHeaders,
-        })
-      }
-
-      // Si ya tiene otro hash (está en uso)
-      if (licenseInfo.hash_tienda && licenseInfo.hash_tienda !== hash_tienda) {
-        // Marcar como inválida
-        await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
-          status: "inválida",
-          ultima_verificacion: getTodayDate(),
-        })
-
-        return new Response(JSON.stringify({ valid: false, error: "duplicada" }), { status: 409, headers: corsHeaders })
-      }
-
-      // Activar licencia
+    // 5. Procesar según la acción
+    if (action === "clear") {
+      // Liberar licencia
       await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
-        hash_tienda: hash_tienda,
-        status: "activa",
+        hash_tienda: "",
+        status: "inactiva",
         ultima_verificacion: getTodayDate(),
       })
 
-      return new Response(JSON.stringify({ valid: true, message: "Licencia válida" }), {
+      return new Response(JSON.stringify({ valid: true, message: "Licencia liberada" }), {
         status: 200,
         headers: corsHeaders,
       })
-    } catch (error) {
-      return new Response(
-        JSON.stringify({
-          valid: false,
-          error: error.message,
-          debug: error.stack,
-        }),
-        { status: 500, headers: corsHeaders },
-      )
     }
-  },
+
+    // 6. Validación normal
+    if (!hash_tienda) {
+      return new Response(JSON.stringify({ valid: false, error: "Falta hash_tienda" }), {
+        status: 400,
+        headers: corsHeaders,
+      })
+    }
+
+    // Si ya está inválida
+    if (licenseInfo.status === "inválida") {
+      return new Response(JSON.stringify({ valid: false, error: "Licencia inválida" }), {
+        status: 200,
+        headers: corsHeaders,
+      })
+    }
+
+    // Si ya tiene otro hash (está en uso)
+    if (licenseInfo.hash_tienda && licenseInfo.hash_tienda !== hash_tienda) {
+      // Marcar como inválida
+      await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
+        status: "inválida",
+        ultima_verificacion: getTodayDate(),
+      })
+
+      return new Response(JSON.stringify({ valid: false, error: "duplicada" }), { status: 409, headers: corsHeaders })
+    }
+
+    // Activar licencia
+    await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
+      hash_tienda: hash_tienda,
+      status: "activa",
+      ultima_verificacion: getTodayDate(),
+    })
+
+    return new Response(JSON.stringify({ valid: true, message: "Licencia válida" }), {
+      status: 200,
+      headers: corsHeaders,
+    })
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        valid: false,
+        error: error.message,
+        debug: error.stack,
+      }),
+      { status: 500, headers: corsHeaders },
+    )
+  }
 }
 
 // Obtener token de Google (simple)
@@ -135,7 +122,8 @@ async function getGoogleToken(env) {
   })
 
   if (!response.ok) {
-    throw new Error(`Error OAuth: ${response.status}`)
+    const errorText = await response.text()
+    throw new Error(`Error OAuth: ${response.status} - ${errorText}`)
   }
 
   const data = await response.json()
@@ -144,10 +132,8 @@ async function getGoogleToken(env) {
 
 // Crear JWT simple
 async function createJWT(env) {
-  const header = {
-    alg: "RS256",
-    typ: "JWT",
-  }
+  // Importar jwt dinámicamente
+  const jwt = await import("jsonwebtoken")
 
   const now = Math.floor(Date.now() / 1000)
   const payload = {
@@ -158,9 +144,7 @@ async function createJWT(env) {
     iat: now,
   }
 
-  // Usar la librería jwt que ya tienes
-  const jwt = require("jsonwebtoken")
-  return jwt.sign(payload, env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"), { algorithm: "RS256" })
+  return jwt.default.sign(payload, env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"), { algorithm: "RS256" })
 }
 
 // Leer Google Sheets
@@ -172,7 +156,8 @@ async function readGoogleSheet(sheetId, token) {
   })
 
   if (!response.ok) {
-    throw new Error(`Error leyendo sheet: ${response.status}`)
+    const errorText = await response.text()
+    throw new Error(`Error leyendo sheet: ${response.status} - ${errorText}`)
   }
 
   const data = await response.json()
@@ -224,7 +209,8 @@ async function updateLicense(sheetId, token, rowNumber, updates) {
   })
 
   if (!readResponse.ok) {
-    throw new Error(`Error leyendo fila: ${readResponse.status}`)
+    const errorText = await readResponse.text()
+    throw new Error(`Error leyendo fila: ${readResponse.status} - ${errorText}`)
   }
 
   const readData = await readResponse.json()
@@ -264,7 +250,8 @@ async function updateLicense(sheetId, token, rowNumber, updates) {
   })
 
   if (!updateResponse.ok) {
-    throw new Error(`Error actualizando: ${updateResponse.status}`)
+    const errorText = await updateResponse.text()
+    throw new Error(`Error actualizando: ${updateResponse.status} - ${errorText}`)
   }
 }
 

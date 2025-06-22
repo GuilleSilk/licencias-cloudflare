@@ -1,4 +1,3 @@
-import jwt from "jsonwebtoken"
 
 // Función para añadir headers CORS
 function getCorsHeaders() {
@@ -10,297 +9,266 @@ function getCorsHeaders() {
   }
 }
 
-// Generar token JWT para autenticación
-async function getAccessToken(email, privateKey) {
-  try {
-    const now = Math.floor(Date.now() / 1000)
-    const payload = {
-      iss: email,
-      scope: "https://www.googleapis.com/auth/spreadsheets",
-      aud: "https://oauth2.googleapis.com/token",
-      exp: now + 3600,
-      iat: now,
+// Validador de licencias simple y directo
+export default {
+  async fetch(request, env) {
+    // CORS headers
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
     }
 
-    const token = jwt.sign(payload, privateKey, { algorithm: "RS256" })
-
-    const response = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: token,
-      }),
-    })
-
-    // Verificar si la respuesta es válida antes de parsear
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Error response from Google OAuth:", errorText)
-      throw new Error(`Error obteniendo token: ${response.status} ${response.statusText} - ${errorText}`)
+    // Manejar OPTIONS (preflight)
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 200, headers: corsHeaders })
     }
 
-    const responseText = await response.text()
-    console.log("OAuth response text:", responseText)
-
-    if (!responseText.trim()) {
-      throw new Error("Respuesta vacía del servidor de OAuth")
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Solo POST permitido" }), { status: 405, headers: corsHeaders })
     }
 
-    const data = JSON.parse(responseText)
-    return data.access_token
-  } catch (error) {
-    console.error("Error in getAccessToken:", error)
-    throw error
-  }
-}
-
-// Función para hacer request a Google Sheets con retry
-async function fetchGoogleSheets(url, accessToken, retries = 3) {
-  for (let i = 0; i < retries; i++) {
     try {
-      console.log(`Intento ${i + 1} - Fetching Google Sheets URL:`, url)
+      // 1. Obtener datos del request
+      const { licencia, hash_tienda, action } = await request.json()
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-        },
+      if (!licencia) {
+        return new Response(JSON.stringify({ valid: false, error: "Falta licencia" }), {
+          status: 400,
+          headers: corsHeaders,
+        })
+      }
+
+      // 2. Obtener token de Google
+      const token = await getGoogleToken(env)
+
+      // 3. Leer Google Sheets
+      const sheetData = await readGoogleSheet(env.GOOGLE_SHEET_ID, token)
+
+      // 4. Buscar la licencia
+      const licenseInfo = findLicense(sheetData, licencia)
+
+      if (!licenseInfo) {
+        return new Response(JSON.stringify({ valid: false, error: "Licencia no encontrada" }), {
+          status: 404,
+          headers: corsHeaders,
+        })
+      }
+
+      // 5. Procesar según la acción
+      if (action === "clear") {
+        // Liberar licencia
+        await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
+          hash_tienda: "",
+          status: "inactiva",
+          ultima_verificacion: getTodayDate(),
+        })
+
+        return new Response(JSON.stringify({ valid: true, message: "Licencia liberada" }), {
+          status: 200,
+          headers: corsHeaders,
+        })
+      }
+
+      // 6. Validación normal
+      if (!hash_tienda) {
+        return new Response(JSON.stringify({ valid: false, error: "Falta hash_tienda" }), {
+          status: 400,
+          headers: corsHeaders,
+        })
+      }
+
+      // Si ya está inválida
+      if (licenseInfo.status === "inválida") {
+        return new Response(JSON.stringify({ valid: false, error: "Licencia inválida" }), {
+          status: 200,
+          headers: corsHeaders,
+        })
+      }
+
+      // Si ya tiene otro hash (está en uso)
+      if (licenseInfo.hash_tienda && licenseInfo.hash_tienda !== hash_tienda) {
+        // Marcar como inválida
+        await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
+          status: "inválida",
+          ultima_verificacion: getTodayDate(),
+        })
+
+        return new Response(JSON.stringify({ valid: false, error: "duplicada" }), { status: 409, headers: corsHeaders })
+      }
+
+      // Activar licencia
+      await updateLicense(env.GOOGLE_SHEET_ID, token, licenseInfo.row, {
+        hash_tienda: hash_tienda,
+        status: "activa",
+        ultima_verificacion: getTodayDate(),
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`Error en Google Sheets (intento ${i + 1}):`, response.status, errorText)
-
-        if (i === retries - 1) {
-          throw new Error(`Error en Google Sheets: ${response.status} ${response.statusText} - ${errorText}`)
-        }
-        continue
-      }
-
-      const responseText = await response.text()
-      console.log("Google Sheets response text length:", responseText.length)
-
-      if (!responseText.trim()) {
-        if (i === retries - 1) {
-          throw new Error("Respuesta vacía de Google Sheets")
-        }
-        continue
-      }
-
-      const data = JSON.parse(responseText)
-      return data
+      return new Response(JSON.stringify({ valid: true, message: "Licencia válida" }), {
+        status: 200,
+        headers: corsHeaders,
+      })
     } catch (error) {
-      console.error(`Error en intento ${i + 1}:`, error.message)
-      if (i === retries - 1) {
-        throw error
-      }
-      // Esperar un poco antes del siguiente intento
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)))
+      return new Response(
+        JSON.stringify({
+          valid: false,
+          error: error.message,
+          debug: error.stack,
+        }),
+        { status: 500, headers: corsHeaders },
+      )
     }
+  },
+}
+
+// Obtener token de Google (simple)
+async function getGoogleToken(env) {
+  const jwt = await createJWT(env)
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Error OAuth: ${response.status}`)
+  }
+
+  const data = await response.json()
+  return data.access_token
+}
+
+// Crear JWT simple
+async function createJWT(env) {
+  const header = {
+    alg: "RS256",
+    typ: "JWT",
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const payload = {
+    iss: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    scope: "https://www.googleapis.com/auth/spreadsheets",
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600,
+    iat: now,
+  }
+
+  // Usar la librería jwt que ya tienes
+  const jwt = require("jsonwebtoken")
+  return jwt.sign(payload, env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"), { algorithm: "RS256" })
+}
+
+// Leer Google Sheets
+async function readGoogleSheet(sheetId, token) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A:Z`
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Error leyendo sheet: ${response.status}`)
+  }
+
+  const data = await response.json()
+  return data.values || []
+}
+
+// Buscar licencia en los datos
+function findLicense(sheetData, licencia) {
+  if (sheetData.length === 0) return null
+
+  const headers = sheetData[0]
+  const rows = sheetData.slice(1)
+
+  // Encontrar índices de columnas
+  const licenciaCol = headers.indexOf("licencia")
+  const hashCol = headers.indexOf("hash_tienda")
+  const statusCol = headers.indexOf("status")
+  const fechaCol = headers.indexOf("última_verificación")
+
+  if (licenciaCol === -1) {
+    throw new Error('No se encontró columna "licencia"')
+  }
+
+  // Buscar la fila
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    if (row[licenciaCol] === licencia) {
+      return {
+        row: i + 2, // +2 porque: +1 por header, +1 por índice base 1 de Google
+        licencia: row[licenciaCol],
+        hash_tienda: row[hashCol] || "",
+        status: row[statusCol] || "",
+        ultima_verificacion: row[fechaCol] || "",
+        data: row,
+      }
+    }
+  }
+
+  return null
+}
+
+// Actualizar licencia
+async function updateLicense(sheetId, token, rowNumber, updates) {
+  // Primero leer la fila actual
+  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A${rowNumber}:Z${rowNumber}`
+
+  const readResponse = await fetch(readUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!readResponse.ok) {
+    throw new Error(`Error leyendo fila: ${readResponse.status}`)
+  }
+
+  const readData = await readResponse.json()
+  const currentRow = readData.values?.[0] || []
+
+  // Leer headers para saber qué columna actualizar
+  const headersUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A1:Z1`
+  const headersResponse = await fetch(headersUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  const headersData = await headersResponse.json()
+  const headers = headersData.values?.[0] || []
+
+  // Actualizar los valores necesarios
+  const newRow = [...currentRow]
+
+  Object.keys(updates).forEach((key) => {
+    const colIndex = headers.indexOf(key)
+    if (colIndex !== -1) {
+      newRow[colIndex] = updates[key]
+    }
+  })
+
+  // Escribir la fila actualizada
+  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A${rowNumber}:Z${rowNumber}?valueInputOption=USER_ENTERED`
+
+  const updateResponse = await fetch(updateUrl, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      values: [newRow],
+    }),
+  })
+
+  if (!updateResponse.ok) {
+    throw new Error(`Error actualizando: ${updateResponse.status}`)
   }
 }
 
-// Función para actualizar Google Sheets
-async function updateGoogleSheets(url, accessToken, data, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      console.log(`Intento ${i + 1} - Updating Google Sheets:`, url)
-
-      const response = await fetch(url, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(data),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`Error actualizando Google Sheets (intento ${i + 1}):`, response.status, errorText)
-
-        if (i === retries - 1) {
-          throw new Error(`Error al actualizar Google Sheets: ${response.status} ${response.statusText} - ${errorText}`)
-        }
-        continue
-      }
-
-      const responseText = await response.text()
-      if (responseText.trim()) {
-        JSON.parse(responseText) // Verificar que es JSON válido
-      }
-
-      return true
-    } catch (error) {
-      console.error(`Error en actualización intento ${i + 1}:`, error.message)
-      if (i === retries - 1) {
-        throw error
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)))
-    }
-  }
-}
-
-// Función principal
-export async function validateLicense(request, env) {
-  const headers = getCorsHeaders()
-
-  // Manejar preflight (OPTIONS)
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers })
-  }
-
-  if (request.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers })
-  }
-
-  try {
-    console.log("=== INICIO VALIDACIÓN LICENCIA ===")
-
-    // Acceder a las variables de entorno
-    const SHEET_ID = env.GOOGLE_SHEET_ID
-    const GOOGLE_SERVICE_ACCOUNT_EMAIL = env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-    const GOOGLE_PRIVATE_KEY = env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
-
-    // Verificar variables de entorno
-    if (!SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
-      throw new Error("Faltan variables de entorno: GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL o GOOGLE_PRIVATE_KEY")
-    }
-
-    console.log("Variables de entorno verificadas")
-
-    // Parsear request body
-    const requestText = await request.text()
-    console.log("Request body text:", requestText)
-
-    if (!requestText.trim()) {
-      return new Response(JSON.stringify({ valid: false, error: "Request body vacío" }), { status: 400, headers })
-    }
-
-    const body = JSON.parse(requestText)
-    const { licencia, hash_tienda, action } = body
-    console.log("Request body parsed:", { licencia, hash_tienda, action })
-
-    if (!licencia) {
-      return new Response(JSON.stringify({ valid: false, error: "Falta el parámetro licencia" }), {
-        status: 400,
-        headers,
-      })
-    }
-
-    // Obtener token de acceso
-    console.log("Obteniendo access token...")
-    const accessToken = await getAccessToken(GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY)
-    console.log("Access token obtenido exitosamente")
-
-    // Consulta a Google Sheets con retry
-    const googleSheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A:Z`
-    const data = await fetchGoogleSheets(googleSheetsUrl, accessToken)
-
-    console.log("Google Sheets data obtenida:", data ? "✓" : "✗")
-    const rows = data.values || []
-    console.log("Número de filas:", rows.length)
-
-    if (rows.length === 0) {
-      throw new Error("No se encontraron filas en la hoja Licencias")
-    }
-
-    // Obtener encabezados y mapear a índices
-    const headersRow = rows[0]
-    console.log("Headers encontrados:", headersRow)
-
-    const licenciaIndex = headersRow.indexOf("licencia")
-    const hashTiendaIndex = headersRow.indexOf("hash_tienda")
-    const statusIndex = headersRow.indexOf("status")
-    const ultimaVerificacionIndex = headersRow.indexOf("última_verificación")
-
-    console.log("Índices de columnas:", { licenciaIndex, hashTiendaIndex, statusIndex, ultimaVerificacionIndex })
-
-    if (licenciaIndex === -1 || hashTiendaIndex === -1 || statusIndex === -1 || ultimaVerificacionIndex === -1) {
-      throw new Error("Faltan columnas requeridas en la hoja: licencia, hash_tienda, status o última_verificación")
-    }
-
-    // Buscar la licencia
-    const licenseRow = rows.slice(1).find((row) => row[licenciaIndex] && row[licenciaIndex].trim() === licencia.trim())
-    console.log("Licencia encontrada:", licenseRow ? "✓" : "✗")
-
-    if (!licenseRow) {
-      return new Response(JSON.stringify({ valid: false, error: "Licencia no encontrada" }), { status: 404, headers })
-    }
-
-    // Fecha actual YYYY-MM-DD
-    const today = new Date().toISOString().split("T")[0]
-
-    // Acción: clear libera la licencia
-    if (action === "clear") {
-      const rowIndex = rows.indexOf(licenseRow) + 1
-      const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A${rowIndex}:Z${rowIndex}?valueInputOption=USER_ENTERED`
-
-      licenseRow[hashTiendaIndex] = ""
-      licenseRow[statusIndex] = "inactiva"
-      licenseRow[ultimaVerificacionIndex] = today
-
-      await updateGoogleSheets(updateUrl, accessToken, { values: [licenseRow] })
-
-      return new Response(JSON.stringify({ valid: true, message: "Licencia liberada" }), { status: 200, headers })
-    }
-
-    // Validación por defecto
-    if (!hash_tienda) {
-      return new Response(JSON.stringify({ valid: false, error: "Falta el parámetro hash_tienda" }), {
-        status: 400,
-        headers,
-      })
-    }
-
-    const currentStatus = licenseRow[statusIndex]
-    const currentHashTienda = licenseRow[hashTiendaIndex]
-    console.log("Estado actual:", { currentStatus, currentHashTienda })
-
-    // Si la licencia ya está inválida
-    if (currentStatus === "inválida") {
-      return new Response(JSON.stringify({ valid: false, error: "Licencia inválida" }), { status: 200, headers })
-    }
-
-    // Si ya hay un hash y es diferente al actual (licencia en uso)
-    if (currentHashTienda && currentHashTienda !== hash_tienda) {
-      const rowIndex = rows.indexOf(licenseRow) + 1
-      const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A${rowIndex}:Z${rowIndex}?valueInputOption=USER_ENTERED`
-
-      licenseRow[statusIndex] = "inválida"
-      licenseRow[ultimaVerificacionIndex] = today
-
-      await updateGoogleSheets(updateUrl, accessToken, { values: [licenseRow] })
-
-      return new Response(JSON.stringify({ valid: false, error: "duplicada" }), { status: 409, headers })
-    }
-
-    // Actualizar la licencia con el hash actual
-    const rowIndex = rows.indexOf(licenseRow) + 1
-    const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A${rowIndex}:Z${rowIndex}?valueInputOption=USER_ENTERED`
-
-    licenseRow[hashTiendaIndex] = hash_tienda
-    licenseRow[statusIndex] = "activa"
-    licenseRow[ultimaVerificacionIndex] = today
-
-    await updateGoogleSheets(updateUrl, accessToken, { values: [licenseRow] })
-
-    console.log("=== VALIDACIÓN EXITOSA ===")
-    return new Response(JSON.stringify({ valid: true, message: "Licencia válida" }), { status: 200, headers })
-  } catch (error) {
-    console.error("=== ERROR EN VALIDACIÓN ===")
-    console.error("Error message:", error.message)
-    console.error("Error stack:", error.stack)
-
-    return new Response(
-      JSON.stringify({
-        valid: false,
-        error: `Error interno del servidor: ${error.message}`,
-        timestamp: new Date().toISOString(),
-      }),
-      { status: 500, headers },
-    )
-  }
+// Obtener fecha de hoy
+function getTodayDate() {
+  return new Date().toISOString().split("T")[0]
 }

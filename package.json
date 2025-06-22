@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "dependencies": {
     "google-spreadsheet": "^4.1.1",
-    "google-auth-library": "^9.6.0"
+    "google-auth-library": "^9.6.0",
+    "jsonwebtoken": "^9.0.2"
   }
 }

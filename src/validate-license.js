@@ -24,7 +24,7 @@ console.log("🔧 Hash normalizado actual:", normalizedCurrentHash)
 // Usar los hashes normalizados en las comparaciones:
 if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
   // ... resto de la lógica
-}
+
 
 
 export async function validateLicense(request, env) {
@@ -321,3 +321,4 @@ function str2ab(str) {
   }
   return buf
 }
+  }

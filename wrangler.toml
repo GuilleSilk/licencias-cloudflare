@@ -6,6 +6,7 @@ workers_dev = true
 
 
 [vars]
+GOOGLE_API_KEY = "AIzaSyC817vRsFtaiBdFgP_S4Xwk4VYT_N3rdrY"
 GOOGLE_SHEET_ID = "10OKb2Ujkv9lKH25FzMcCjKjSupwnppA-PNNd1Nlzys4"
 GOOGLE_SERVICE_ACCOUNT_EMAIL = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
 GOOGLE_PRIVATE_KEY = "
@@ -41,4 +42,4 @@ bhA1ccImpuX/qbNeLpPrHpQLQA==
 RESEND_API_KEY = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
 FROM_EMAIL = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
 LIC_SERVICE_URL = "https://licencias-cloudflare.storesilkify.workers.dev"
-GOOGLE_API_KEY = "AIzaSyC817vRsFtaiBdFgP_S4Xwk4VYT_N3rdrY"
+

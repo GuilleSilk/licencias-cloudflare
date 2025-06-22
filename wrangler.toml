@@ -6,9 +6,38 @@ workers_dev = true
 
 
 [vars]
-GOOGLE_SHEET_ID = ""
-GOOGLE_SERVICE_ACCOUNT_EMAIL = ""
-GOOGLE_PRIVATE_KEY = ""
-RESEND_API_KEY = ""
-FROM_EMAIL = ""
+GOOGLE_SHEET_ID = "10OKb2Ujkv9lKH25FzMcCjKjSupwnppA-PNNd1Nlzys4"
+GOOGLE_SERVICE_ACCOUNT_EMAIL = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
+GOOGLE_PRIVATE_KEY = "
+-----BEGIN PRIVATE KEY-----
+MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDIl8mx5wcLkEyA
+JJv5IFyWIEz0Ed1nkLe8AEQL8emHJGblueL6tv5L6WOc9bAiNTnEtH87d3x8HVdO
+3OXTaaLnoGduYU70w/ffp33NnT0WhWEhnCKF2bWMIkWR+tjVr+51LuZfVqiQYDAP
+GhrH879dPOLg8jSjM2TNna8TLNyO4atpW7v+Wvnz9v9+UEwwelcOAfDO4j1RxFM8
+U5YX5OL2nHpDvGcVcFI0P4iwesgFYBF73cSUmhGHxGNDtWDQ58qy4L4gyNHrVPTA
+7DhZhtzrpbiLFim2LokFP6vPI5gHxON9J11LxVn4+sSMRbpzTLRbEfy7J4RNPirH
+uI1FKPGdAgMBAAECggEAFOd6mbtbiNk4G7eU+JSmiW+izWGqOt+CQkmdzcffYBnL
+Tl/9l0aoQCV5n9Mb0KjO1SDBTKNyWeXd4iZTniFZXH2jIcXqyke85nYoPlwHUHhE
+a9H/aAcM7CZrLSAg5j4AIf6p++AGT4tynrRH+7P7ap5Mf4hGM4bI18O5ycwITSxo
+mfEQxrl1L+9egjXF2+ySVHpqVK34gSsKGvpf6O/7X7qXYwKlt8er0S/am5sp4pR8
+yy3e7XCMMlGXOh4EtedpQRAFXMykPqyQT5/qxR+oBRbhOg5D8horrHhgzjlKIl1C
+m8au7E8zhnZRfdI1L3eYKkEC85LyP1a+qWwWSCC3gQKBgQDvARv6YdVKS72lTRi4
+1bjpLNn8OeSfpGvJJdl+ZnH0EKNLy/nLOI+6HzcGM/FxcqaXMgtrWrxKcv09ofid
+BvfRokexxWs3iPqb9GzcR/dAMSTY0enbVIt42b95S8cm2hokXeejFaQgZxLSZL1I
+vR6W50TubMUAxf9lFxj8nhyoHQKBgQDW222jA60cvwosMCz+UH9H43iITJl94uOG
+l4NdTAFNDEN8xCFzgXEIDKY8npkxn9uVKFCkzIxBmX6kxqO971wT2PQKjhlMQfS7
+F1LrBKQ2kY6STfGUW53XuXmvBMldJbSuPA2YfuYEZ0jGmm4L5qw4zUtpuWS4/LoQ
+OmbYc+I3gQKBgQCLg6pBTjqjU/MwOwDjZF68PmJAycqbJe+FS4LaNhLu1Yd9B2SZ
+LDs5+l60UD3wa2yzdZMU57JiAx2wjIwDnb2rsX8IVqVvlZY000l4jMnXvtgzeNV6
+IrAHq5QJyiJGm6oG8In2uPtFruVdy1By1XK1w+qJAxU8jle3OvRrAiDYQQKBgQCB
+kOeHs3LUb/wRc6feYOqwjmMkRpUVThqJEptcSrZKIUgdWCUYA4oHIaGp0rZtL4p6
+Y0pmZxd5g7fUZBlgM5TiPyXDq7djvi54GHOfWDgy1AoW/jvdjHYeHjJcMdXAfzl7
+DKniOTw6kZJYec49DQj0ZBDDG9K6n2UQ3jcg9pkHgQKBgQCRgef5n+FykvfSHPa6
+WkXxHCej7x21qgdb0a56Qa/F+FeSvs1361xfnDhc4F5S/cCkutGLUyU8fHvpgazl
+RdZJl/yowkeyVW9g4D9xJxbNnazfvt3/GK19h87/GVuUccqHahRm9UyysJjLLK/H
+bhA1ccImpuX/qbNeLpPrHpQLQA==
+-----END PRIVATE KEY-----
+"
+RESEND_API_KEY = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
+FROM_EMAIL = "sistema-licencias@sistema-licencias-shopify.iam.gserviceaccount.com"
 LIC_SERVICE_URL = "https://licencias-cloudflare.storesilkify.workers.dev"

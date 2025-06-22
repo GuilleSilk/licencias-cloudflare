@@ -17,7 +17,7 @@ export async function validateLicense(request, env) {
     return new Response(null, { status: 200, headers });
   }
 
-  // Acceder a las variables de entorno dentro de la función
+  // Acceder a las variables de entorno
   const SHEET_ID = env.GOOGLE_SHEET_ID;
   const GOOGLE_API_KEY = env.GOOGLE_API_KEY;
 
@@ -45,16 +45,20 @@ export async function validateLicense(request, env) {
     const googleSheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Licencias!A:Z?key=${GOOGLE_API_KEY}`;
     console.log("Fetching Google Sheets URL:", googleSheetsUrl);
     const response = await fetch(googleSheetsUrl);
+    console.log("Google Sheets response status:", response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error(`Error en la solicitud a Google Sheets: ${response.status} ${response.statusText}`);
+      const errorText = await response.text(); // Obtener el cuerpo de la respuesta como texto
+      throw new Error(`Error en la solicitud a Google Sheets: ${response.status} ${response.statusText} - ${errorText}`);
     }
+
     const data = await response.json();
     console.log("Google Sheets data:", data);
     const rows = data.values || [];
     console.log("Rows from Google Sheets:", rows);
 
     // Buscar la licencia
-    const licenseRow = rows.find(row => row[3] === licencia); // Asume que "licencia" está en la columna D (índice 3)
+    const licenseRow = rows.find(row => row[3] && row[3].trim() === licencia.trim());
     console.log("Searching for licencia:", licencia, "Found row:", licenseRow);
 
     if (!licenseRow) {
@@ -79,7 +83,8 @@ export async function validateLicense(request, env) {
         }),
       });
       if (!updateResponse.ok) {
-        throw new Error(`Error al actualizar Google Sheets: ${updateResponse.status} ${updateResponse.statusText}`);
+        const errorText = await updateResponse.text();
+        throw new Error(`Error al actualizar Google Sheets: ${updateResponse.status} ${updateResponse.statusText} - ${errorText}`);
       }
       return new Response(JSON.stringify({ valid: true, message: "Licencia liberada" }), { status: 200, headers });
     }
@@ -110,7 +115,8 @@ export async function validateLicense(request, env) {
         }),
       });
       if (!updateResponse.ok) {
-        throw new Error(`Error al actualizar Google Sheets: ${updateResponse.status} ${updateResponse.statusText}`);
+        const errorText = await updateResponse.text();
+        throw new Error(`Error al actualizar Google Sheets: ${updateResponse.status} ${updateResponse.statusText} - ${errorText}`);
       }
       return new Response(JSON.stringify({ valid: false, error: "duplicada" }), { status: 409, headers });
     }
@@ -126,8 +132,9 @@ export async function validateLicense(request, env) {
       }),
     });
     if (!updateResponse.ok) {
-      throw new Error(`Error al actualizar Google Sheets: ${updateResponse.status} ${updateResponse.statusText}`);
-      }
+      const errorText = await updateResponse.text();
+      throw new Error(`Error al actualizar Google Sheets: ${updateResponse.status} ${updateResponse.statusText} - ${errorText}`);
+    }
     return new Response(JSON.stringify({ valid: true, message: "Licencia válida" }), { status: 200, headers });
   } catch (error) {
     console.error("Error validating license:", error.message, error.stack);

@@ -128,8 +128,25 @@ export async function validateLicense(request, env) {
 
     // 6. LÓGICA DE VALIDACIÓN CON HASHES NORMALIZADOS
 
-    // Acción: clear (liberar licencia para otra tienda)
+    // Acción: clear (liberar licencia SOLO si el hash coincide)
     if (action === "clear") {
+      // NUEVO: Solo limpiar si el hash actual coincide con el de la tienda que hace clear
+      if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
+        return new Response(
+          JSON.stringify({
+            valid: false,
+            message: "No puedes liberar esta licencia desde esta tienda",
+            error: "Esta licencia pertenece a otra tienda",
+            debug: {
+              currentHash: normalizedCurrentHash,
+              requestHash: normalizedHashTienda,
+            },
+          }),
+          { status: 403, headers: corsHeaders },
+        )
+      }
+
+      // Solo limpiar si no hay hash (libre) o si el hash coincide
       await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
         hash_tienda: "", // Borrar hash para liberar
         status: "activa", // MANTENER ACTIVA para que otra tienda pueda usarla
@@ -178,8 +195,14 @@ export async function validateLicense(request, env) {
       )
     }
 
-    // USAR HASHES NORMALIZADOS EN LA COMPARACIÓN
+    // DETECCIÓN DE DUPLICADO MEJORADA
     if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
+      console.log("🚨 DUPLICADO DETECTADO:", {
+        currentHash: normalizedCurrentHash,
+        requestHash: normalizedHashTienda,
+      })
+
+      // Marcar como inactiva
       await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
         status: "inactiva",
         última_verificación: today,
@@ -189,15 +212,16 @@ export async function validateLicense(request, env) {
       return new Response(
         JSON.stringify({
           valid: false,
-          error: "Licencia en uso en otra tienda",
+          error: "duplicada", // IMPORTANTE: Este es el error que busca tu cliente
           status: "inactiva",
           message: "Esta licencia está siendo usada en otra tienda y ha sido desactivada",
           debug: {
             currentHashNormalized: normalizedCurrentHash,
             sentHashNormalized: normalizedHashTienda,
+            reason: "Hash mismatch - license in use by another store",
           },
         }),
-        { status: 409, headers: corsHeaders },
+        { status: 409, headers: corsHeaders }, // Status 409 = Conflict
       )
     }
 

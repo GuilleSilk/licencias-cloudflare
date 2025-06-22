@@ -103,20 +103,24 @@ export async function validateLicense(request, env) {
     const currentHash = licenseRow[hashCol] || ""
     const today = new Date().toISOString().split("T")[0]
 
-    // 5. LÓGICA DE VALIDACIÓN ACTUALIZADA
+    // 5. LÓGICA DE VALIDACIÓN CORREGIDA
 
-    // Acción: clear (liberar licencia)
+    // Acción: clear (liberar licencia para otra tienda)
     if (action === "clear") {
       await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
-        hash_tienda: "",
-        status: "inactiva",
+        hash_tienda: "", // Borrar hash para liberar
+        status: "activa", // MANTENER ACTIVA para que otra tienda pueda usarla
         última_verificación: today,
       })
 
-      return new Response(JSON.stringify({ valid: true, message: "Licencia liberada correctamente" }), {
-        status: 200,
-        headers: corsHeaders,
-      })
+      return new Response(
+        JSON.stringify({
+          valid: true,
+          message: "Licencia liberada y disponible para otra tienda",
+          status: "activa",
+        }),
+        { status: 200, headers: corsHeaders },
+      )
     }
 
     // Validación normal - necesita hash_tienda
@@ -127,24 +131,36 @@ export async function validateLicense(request, env) {
       })
     }
 
-    // Si la licencia ya está marcada como inválida o inactiva
-    if (currentStatus === "inválida" || currentStatus === "inactiva") {
+    // Si la licencia está marcada como inválida (permanentemente)
+    if (currentStatus === "inválida") {
       return new Response(
         JSON.stringify({
           valid: false,
-          error: `Licencia ${currentStatus}`,
-          status: currentStatus,
+          error: "Licencia inválida permanentemente",
+          status: "inválida",
         }),
         { status: 200, headers: corsHeaders },
       )
     }
 
-    // NUEVA LÓGICA: Si ya tiene un hash diferente, marcar como INACTIVA
+    // Si la licencia está inactiva (temporalmente deshabilitada)
+    if (currentStatus === "inactiva") {
+      return new Response(
+        JSON.stringify({
+          valid: false,
+          error: "Licencia temporalmente inactiva",
+          status: "inactiva",
+        }),
+        { status: 200, headers: corsHeaders },
+      )
+    }
+
+    // Si ya tiene un hash diferente, marcar como INACTIVA
     if (currentHash && currentHash !== hash_tienda) {
-      // Marcar como INACTIVA (no inválida)
       await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
         status: "inactiva",
         última_verificación: today,
+        // NO cambiar el hash existente para mantener registro
       })
 
       return new Response(
@@ -158,7 +174,7 @@ export async function validateLicense(request, env) {
       )
     }
 
-    // Si no tiene hash o tiene el mismo hash, activar/mantener activa
+    // Si no tiene hash (libre) o tiene el mismo hash, activar/mantener activa
     await updateLicenseRow(env.GOOGLE_SHEET_ID, accessToken, rowIndex, headers, {
       hash_tienda: hash_tienda,
       status: "activa",
@@ -189,9 +205,8 @@ export async function validateLicense(request, env) {
   }
 }
 
-// Función para actualizar una fila en Google Sheets
+// Resto del código igual...
 async function updateLicenseRow(sheetId, accessToken, rowIndex, headers, updates) {
-  // Leer fila actual
   const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A${rowIndex}:Z${rowIndex}`
   const readResponse = await fetch(readUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -203,14 +218,11 @@ async function updateLicenseRow(sheetId, accessToken, rowIndex, headers, updates
 
   const readData = await readResponse.json()
   const currentRow = readData.values?.[0] || []
-
-  // Crear nueva fila con updates
   const newRow = [...currentRow]
 
   Object.keys(updates).forEach((key) => {
     const colIndex = headers.indexOf(key)
     if (colIndex !== -1) {
-      // Asegurar que el array tenga suficientes elementos
       while (newRow.length <= colIndex) {
         newRow.push("")
       }
@@ -218,7 +230,6 @@ async function updateLicenseRow(sheetId, accessToken, rowIndex, headers, updates
     }
   })
 
-  // Actualizar fila
   const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A${rowIndex}:Z${rowIndex}?valueInputOption=USER_ENTERED`
   const updateResponse = await fetch(updateUrl, {
     method: "PUT",
@@ -234,7 +245,6 @@ async function updateLicenseRow(sheetId, accessToken, rowIndex, headers, updates
   }
 }
 
-// JWT simple usando Web Crypto API nativa
 async function createJWTSimple(env) {
   const header = { alg: "RS256", typ: "JWT" }
   const now = Math.floor(Date.now() / 1000)
@@ -250,7 +260,6 @@ async function createJWTSimple(env) {
   const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_")
   const message = `${headerB64}.${payloadB64}`
 
-  // Importar clave privada
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
     str2ab(
@@ -266,7 +275,6 @@ async function createJWTSimple(env) {
     ["sign"],
   )
 
-  // Firmar
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, new TextEncoder().encode(message))
   const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
     .replace(/=/g, "")

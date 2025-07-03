@@ -1,4 +1,70 @@
 // Función para normalizar hashes de tienda
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url)
+    
+    console.log("🚀 Method:", request.method)
+    console.log("🚀 URL:", request.url)
+    console.log("🚀 Search:", url.search)
+    
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Referer",
+    }
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 200, headers: corsHeaders })
+    }
+
+    // NUEVO: Si es GET con parámetro file = CSS
+    if (request.method === "GET" && url.searchParams.has("file")) {
+      const fileName = url.searchParams.get("file")
+      const referer = request.headers.get("Referer") || ""
+      
+      console.log("📁 CSS Request:", fileName)
+      console.log("🔍 Referer:", referer)
+      
+      // Verificar referer (temporal: permitir todo)
+      const validReferer = referer.includes(".myshopify.com") || 
+                          referer.includes("shopify.com") || 
+                          true // TEMPORAL para testing
+      
+      if (!validReferer) {
+        return new Response("Access denied", { status: 403, headers: corsHeaders })
+      }
+      
+      // Fetch desde CDN
+      const cdnUrl = `https://web-toolkit.pages.dev/css/${fileName}`
+      console.log("🌐 Fetching:", cdnUrl)
+      
+      try {
+        const response = await fetch(cdnUrl)
+        if (!response.ok) {
+          return new Response("File not found", { status: 404, headers: corsHeaders })
+        }
+        
+        const content = await response.text()
+        return new Response(content, {
+          headers: {
+            "Content-Type": "text/css",
+            "Cache-Control": "public, max-age=1800",
+            ...corsHeaders
+          }
+        })
+      } catch (error) {
+        return new Response("CDN error", { status: 500, headers: corsHeaders })
+      }
+    }
+
+    // EXISTENTE: Si es POST = validación (tu función actual)
+    if (request.method === "POST") {
+      return validateLicense(request, env)
+    }
+
+    return new Response("Not found", { status: 404, headers: corsHeaders })
+  }
+}
 function normalizeHash(hash) {
   if (!hash) return hash
 

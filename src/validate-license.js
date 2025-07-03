@@ -1,4 +1,4 @@
-// Función para normalizar hashes de tienda
+// Tu función existente de normalización (sin cambios)
 function normalizeHash(hash) {
   if (!hash) return hash
 
@@ -12,6 +12,154 @@ function normalizeHash(hash) {
   return hash.replace(/^https?:\/\//, "").split(":")[0]
 }
 
+// NUEVA FUNCIÓN: Verificar referer
+function isFromShopify(request) {
+  const referer = request.headers.get("Referer") || ""
+  return referer.includes(".myshopify.com") || referer.includes("shopify.com") || referer.includes("localhost")
+}
+
+// NUEVO PUNTO DE ENTRADA PRINCIPAL
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url)
+    const method = request.method
+
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Referer, Origin",
+    }
+
+    if (method === "OPTIONS") {
+      return new Response(null, { status: 200, headers: corsHeaders })
+    }
+
+    // NUEVA FUNCIONALIDAD: Servir CSS (GET con parámetro file)
+    if (method === "GET" && url.searchParams.has("file")) {
+      const fileName = url.searchParams.get("file")
+      const licencia = url.searchParams.get("license")
+      const hash_tienda = url.searchParams.get("hash")
+
+      console.log("📁 Solicitando CSS:", fileName)
+
+      // Verificar referer
+      if (!isFromShopify(request)) {
+        return new Response("Access denied", { status: 403, headers: corsHeaders })
+      }
+
+      // Validar licencia si se proporcionan parámetros
+      if (licencia && hash_tienda) {
+        const validation = await validateLicenseQuick(licencia, hash_tienda, env)
+        if (!validation.valid) {
+          return new Response(`License invalid: ${validation.error}`, { status: 403, headers: corsHeaders })
+        }
+      }
+
+      // Fetch CSS desde tu CDN
+      const cdnUrl = `https://web-toolkit.pages.dev/css/${fileName}`
+
+      try {
+        const cdnResponse = await fetch(cdnUrl)
+        if (!cdnResponse.ok) {
+          return new Response("File not found", { status: 404, headers: corsHeaders })
+        }
+
+        const cssContent = await cdnResponse.text()
+        return new Response(cssContent, {
+          headers: {
+            "Content-Type": "text/css",
+            "Cache-Control": "public, max-age=1800",
+            ...corsHeaders,
+          },
+        })
+      } catch (error) {
+        return new Response("CDN error", { status: 500, headers: corsHeaders })
+      }
+    }
+
+    // FUNCIONALIDAD EXISTENTE: Validación POST (sin cambios)
+    if (method === "POST") {
+      return validateLicense(request, env)
+    }
+
+    return new Response("Not found", { status: 404, headers: corsHeaders })
+  },
+}
+
+// NUEVA FUNCIÓN: Validación rápida para CSS
+async function validateLicenseQuick(licencia, hash_tienda, env) {
+  try {
+    const jwt = await createJWTSimple(env)
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: jwt,
+      }),
+    })
+
+    if (!tokenResponse.ok) {
+      return { valid: false, error: "OAuth error" }
+    }
+
+    const tokenData = await tokenResponse.json()
+    const accessToken = tokenData.access_token
+
+    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/Licencias!A:Z`
+    const sheetsResponse = await fetch(sheetsUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+
+    if (!sheetsResponse.ok) {
+      return { valid: false, error: "Sheets error" }
+    }
+
+    const sheetsData = await sheetsResponse.json()
+    const rows = sheetsData.values || []
+
+    if (rows.length === 0) {
+      return { valid: false, error: "No data" }
+    }
+
+    const headers = rows[0]
+    const licenciaCol = headers.indexOf("licencia")
+    const hashCol = headers.indexOf("hash_tienda")
+    const statusCol = headers.indexOf("status")
+
+    let licenseRow = null
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][licenciaCol] === licencia) {
+        licenseRow = rows[i]
+        break
+      }
+    }
+
+    if (!licenseRow) {
+      return { valid: false, error: "License not found" }
+    }
+
+    const currentStatus = licenseRow[statusCol] || ""
+    const currentHash = licenseRow[hashCol] || ""
+
+    if (currentStatus === "inválida" || currentStatus === "inactiva") {
+      return { valid: false, error: "License inactive" }
+    }
+
+    const normalizedHashTienda = normalizeHash(hash_tienda)
+    const normalizedCurrentHash = normalizeHash(currentHash)
+
+    if (normalizedCurrentHash && normalizedCurrentHash !== normalizedHashTienda) {
+      return { valid: false, error: "License in use" }
+    }
+
+    return { valid: true }
+  } catch (error) {
+    return { valid: false, error: "Validation error" }
+  }
+}
+
+// TU FUNCIÓN EXISTENTE DE VALIDACIÓN (exactamente igual, sin cambios)
 export async function validateLicense(request, env) {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -127,7 +275,6 @@ export async function validateLicense(request, env) {
     console.log("🔧 Hash actual normalizado:", normalizedCurrentHash)
 
     // 6. LÓGICA DE VALIDACIÓN CON HASHES NORMALIZADOS
-
     // Acción: clear (liberar licencia SOLO si el hash coincide)
     if (action === "clear") {
       // NUEVO: Solo limpiar si el hash actual coincide con el de la tienda que hace clear
@@ -260,7 +407,7 @@ export async function validateLicense(request, env) {
   }
 }
 
-// Resto de funciones auxiliares...
+// TUS FUNCIONES AUXILIARES EXISTENTES (sin cambios)
 async function updateLicenseRow(sheetId, accessToken, rowIndex, headers, updates) {
   const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Licencias!A${rowIndex}:Z${rowIndex}`
   const readResponse = await fetch(readUrl, {

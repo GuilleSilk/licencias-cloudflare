@@ -8,6 +8,25 @@ function normalizeHash(hash) {
   return hash.replace(/^https?:\/\//, "").split(":")[0]
 }
 
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url)
+    
+    console.log("URL completa:", request.url)
+    console.log("Pathname:", url.pathname)
+    console.log("Search:", url.search)
+    
+    // Respuesta simple para cualquier ruta
+    return new Response(`
+      URL: ${request.url}
+      Pathname: ${url.pathname}
+      Search: ${url.search}
+      Method: ${request.method}
+    `, {
+      headers: { "Content-Type": "text/plain" }
+    })
+  }
+}
 // Verificar referer
 function isFromShopify(request) {
   const referer = request.headers.get("Referer") || ""

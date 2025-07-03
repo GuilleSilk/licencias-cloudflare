@@ -1,101 +1,52 @@
 // Función para normalizar hashes de tienda
 export default {
-  async fetch(request, env) {
-    const url = new URL(request.url)
-    const method = request.method
-
-    // Headers CORS
+  async fetch(request) {
+    // CORS headers SIEMPRE
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     }
 
-    // Manejar OPTIONS
-    if (method === "OPTIONS") {
-      return new Response(null, { status: 200, headers: corsHeaders })
+    // OPTIONS request
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 200,
+        headers: corsHeaders,
+      })
     }
 
-    // DEBUG: Mostrar información de la request
-    const debugInfo = {
-      method: method,
-      url: request.url,
-      pathname: url.pathname,
-      search: url.search,
-      searchParams: Object.fromEntries(url.searchParams),
-      headers: Object.fromEntries(request.headers),
-      timestamp: new Date().toISOString(),
-    }
+    const url = new URL(request.url)
 
-    console.log("🔍 DEBUG INFO:", JSON.stringify(debugInfo, null, 2))
+    // GET request
+    if (request.method === "GET") {
+      const file = url.searchParams.get("file")
 
-    // RUTA 1: GET sin parámetros = mostrar debug
-    if (method === "GET" && url.searchParams.size === 0) {
-      return new Response(
-        `
-🚀 WORKER FUNCIONANDO!
-
-Debug Info:
-- Method: ${method}
-- URL: ${request.url}
-- Pathname: ${url.pathname}
-- Search: ${url.search}
-
-Rutas disponibles:
-- GET /?file=nombre.css (para CSS)
-- POST / (para validar licencia)
-
-Ejemplo CSS:
-${url.origin}/?file=base.css
-
-Ejemplo con licencia:
-${url.origin}/?file=base.css&license=ABC123&hash=tienda.myshopify.com
-      `,
-        {
+      if (!file) {
+        // Sin parámetros = info
+        return new Response("🚀 Worker funcionando!\n\nPrueba: ?file=base.css", {
           status: 200,
           headers: {
             "Content-Type": "text/plain",
             ...corsHeaders,
           },
-        },
-      )
-    }
-
-    // RUTA 2: GET con parámetro file = servir CSS
-    if (method === "GET" && url.searchParams.has("file")) {
-      const fileName = url.searchParams.get("file")
-      const license = url.searchParams.get("license")
-      const hash = url.searchParams.get("hash")
-
-      console.log("📁 CSS Request:", { fileName, license, hash })
-
-      // Validar archivo
-      if (!fileName) {
-        return new Response("Missing file parameter", {
-          status: 400,
-          headers: corsHeaders,
         })
       }
 
-      // Por ahora, servir sin validación para testing
-      const cdnUrl = `https://web-toolkit.pages.dev/css/${fileName}`
-      console.log("🌐 Fetching from:", cdnUrl)
-
+      // Con file = servir CSS
       try {
-        const cdnResponse = await fetch(cdnUrl)
+        const cdnUrl = `https://web-toolkit.pages.dev/css/${file}`
+        const response = await fetch(cdnUrl)
 
-        if (!cdnResponse.ok) {
-          console.log("❌ CDN Error:", cdnResponse.status)
-          return new Response(`CDN Error: ${cdnResponse.status} - ${cdnResponse.statusText}`, {
-            status: cdnResponse.status,
+        if (!response.ok) {
+          return new Response(`File not found: ${file}`, {
+            status: 404,
             headers: corsHeaders,
           })
         }
 
-        const cssContent = await cdnResponse.text()
-        console.log("✅ CSS served successfully, length:", cssContent.length)
-
-        return new Response(cssContent, {
+        const css = await response.text()
+        return new Response(css, {
           headers: {
             "Content-Type": "text/css",
             "Cache-Control": "public, max-age=1800",
@@ -103,32 +54,24 @@ ${url.origin}/?file=base.css&license=ABC123&hash=tienda.myshopify.com
           },
         })
       } catch (error) {
-        console.error("❌ Fetch error:", error)
-        return new Response(`Fetch error: ${error.message}`, {
+        return new Response(`Error: ${error.message}`, {
           status: 500,
           headers: corsHeaders,
         })
       }
     }
 
-    // RUTA 3: POST = validar licencia
-    if (method === "POST") {
-      console.log("📮 POST Request received")
-
+    // POST request
+    if (request.method === "POST") {
       try {
         const body = await request.text()
-        console.log("📝 POST Body:", body)
-
-        // Respuesta simple por ahora
         return new Response(
           JSON.stringify({
-            valid: true,
-            message: "POST endpoint working",
-            receivedBody: body,
-            timestamp: new Date().toISOString(),
+            success: true,
+            message: "POST working",
+            received: body,
           }),
           {
-            status: 200,
             headers: {
               "Content-Type": "application/json",
               ...corsHeaders,
@@ -138,7 +81,7 @@ ${url.origin}/?file=base.css&license=ABC123&hash=tienda.myshopify.com
       } catch (error) {
         return new Response(
           JSON.stringify({
-            valid: false,
+            success: false,
             error: error.message,
           }),
           {
@@ -152,31 +95,14 @@ ${url.origin}/?file=base.css&license=ABC123&hash=tienda.myshopify.com
       }
     }
 
-    // RUTA 4: Cualquier otra cosa
-    return new Response(
-      `
-❌ RUTA NO ENCONTRADA
-
-Recibido:
-- Method: ${method}
-- URL: ${request.url}
-- Pathname: ${url.pathname}
-
-Rutas válidas:
-- GET / (info)
-- GET /?file=archivo.css (CSS)
-- POST / (validación)
-    `,
-      {
-        status: 404,
-        headers: {
-          "Content-Type": "text/plain",
-          ...corsHeaders,
-        },
-      },
-    )
+    // Método no permitido
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: corsHeaders,
+    })
   },
 }
+
 
 function normalizeHash(hash) {
   if (!hash) return hash

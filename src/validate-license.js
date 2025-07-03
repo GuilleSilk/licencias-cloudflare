@@ -1,4 +1,3 @@
-// Tu función de normalización (sin cambios)
 function normalizeHash(hash) {
   if (!hash) return hash
   if (hash.includes(".myshopify.com")) {
@@ -8,21 +7,15 @@ function normalizeHash(hash) {
   return hash.replace(/^https?:\/\//, "").split(":")[0]
 }
 
-// NUEVA: Verificar referer para CSS
+// Verificar referer
 function isFromShopify(request) {
   const referer = request.headers.get("Referer") || ""
-  const origin = request.headers.get("Origin") || ""
-
   return (
-    referer.includes(".myshopify.com") ||
-    referer.includes("shopify.com") ||
-    referer.includes("localhost") ||
-    referer.includes("127.0.0.1") ||
-    true // TEMPORAL: permitir todo para testing
+    referer.includes(".myshopify.com") || referer.includes("shopify.com") || referer.includes("localhost") || true // TEMPORAL para testing
   )
 }
 
-// NUEVA: Validación rápida solo para CSS (sin actualizar sheets)
+// Validación rápida para CSS
 async function validateLicenseQuick(licencia, hash_tienda, env) {
   try {
     const jwt = await createJWTSimple(env)
@@ -96,11 +89,14 @@ async function validateLicenseQuick(licencia, hash_tienda, env) {
   }
 }
 
-// NUEVO: Export default principal
+// WORKER PRINCIPAL - ARREGLADO PARA MANEJAR /css
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     const method = request.method
+    const pathname = url.pathname
+
+    console.log("🚀 REQUEST:", { method, pathname, search: url.search })
 
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
@@ -112,27 +108,29 @@ export default {
       return new Response(null, { status: 200, headers: corsHeaders })
     }
 
-    // GET = CSS o información
+    // GET = CSS (tanto en / como en /css)
     if (method === "GET") {
       const file = url.searchParams.get("file")
       const license = url.searchParams.get("license")
       const hash = url.searchParams.get("hash")
 
-      // Sin parámetros = mostrar info
+      console.log("📁 CSS Request:", { pathname, file, license, hash })
+
+      // Si no hay file parameter, mostrar info
       if (!file) {
         return new Response(
-          `🚀 WORKER FUNCIONANDO COMPLETO!
+          `🚀 WORKER FUNCIONANDO!
 
-Rutas disponibles:
-- GET /?file=base.css (CSS básico)
-- GET /?file=base.css&license=ABC123&hash=tienda.myshopify.com (CSS con validación)
-- POST / (validación completa de licencias)
+Debug info:
+- Method: ${method}
+- Pathname: ${pathname}
+- Search: ${url.search}
 
-Ejemplos:
-CSS básico: ${url.origin}/?file=base.css
-CSS protegido: ${url.origin}/?file=base.css&license=tu-licencia&hash=tu-tienda.myshopify.com
+Rutas CSS válidas:
+- GET /?file=base.css
+- GET /css?file=base.css
 
-Tu validación POST sigue funcionando igual.
+Tu request llegó a: ${pathname}${url.search}
           `,
           {
             status: 200,
@@ -140,8 +138,6 @@ Tu validación POST sigue funcionando igual.
           },
         )
       }
-
-      console.log("📁 CSS Request:", { file, license, hash })
 
       // Verificar referer
       if (!isFromShopify(request)) {
@@ -200,12 +196,23 @@ Tu validación POST sigue funcionando igual.
       }
     }
 
-    // POST = tu validación existente (sin cambios)
-    if (method === "POST") {
+    // POST = validación completa (solo en /)
+    if (method === "POST" && pathname === "/") {
       return validateLicense(request, env)
     }
 
-    return new Response("Method not allowed", { status: 405, headers: corsHeaders })
+    // Cualquier otra ruta
+    return new Response(
+      `Route not found: ${method} ${pathname}
+
+Available routes:
+- GET / (info)
+- GET /?file=base.css (CSS)
+- GET /css?file=base.css (CSS)
+- POST / (license validation)
+    `,
+      { status: 404, headers: { "Content-Type": "text/plain", ...corsHeaders } },
+    )
   },
 }
 

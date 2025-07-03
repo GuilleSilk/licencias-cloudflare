@@ -8,25 +8,6 @@ function normalizeHash(hash) {
   return hash.replace(/^https?:\/\//, "").split(":")[0]
 }
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url)
-    
-    console.log("URL completa:", request.url)
-    console.log("Pathname:", url.pathname)
-    console.log("Search:", url.search)
-    
-    // Respuesta simple para cualquier ruta
-    return new Response(`
-      URL: ${request.url}
-      Pathname: ${url.pathname}
-      Search: ${url.search}
-      Method: ${request.method}
-    `, {
-      headers: { "Content-Type": "text/plain" }
-    })
-  }
-}
 // Verificar referer
 function isFromShopify(request) {
   const referer = request.headers.get("Referer") || ""
@@ -38,9 +19,10 @@ function isFromShopify(request) {
   return (
     referer.includes(".myshopify.com") ||
     referer.includes("shopify.com") ||
-    referer.includes("localhost") || // Para testing
-    referer.includes("127.0.0.1")
-  ) // Para testing local
+    referer.includes("localhost") ||
+    referer.includes("127.0.0.1") ||
+    true // TEMPORAL: permitir todo para testing
+  )
 }
 
 // Validación rápida de licencia
@@ -125,56 +107,74 @@ async function validateLicenseQuick(licencia, hash_tienda, env) {
   }
 }
 
-// PUNTO DE ENTRADA PRINCIPAL
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url)
-    const method = request.method
+// FUNCIÓN PRINCIPAL - FORMATO COMPATIBLE
+addEventListener("fetch", (event) => {
+  event.respondWith(handleRequest(event.request, event))
+})
 
-    console.log("📍 Method:", method)
-    console.log("📍 Path:", url.pathname)
-    console.log("📍 Search:", url.search)
+async function handleRequest(request, event) {
+  const url = new URL(request.url)
+  const method = request.method
+  const pathname = url.pathname
+  const searchParams = url.searchParams
 
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Referer, Origin",
+  // Log detallado para debugging
+  console.log("🚀 REQUEST INFO:")
+  console.log("   Method:", method)
+  console.log("   URL:", request.url)
+  console.log("   Pathname:", pathname)
+  console.log("   Search:", url.search)
+
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Referer, Origin",
+  }
+
+  if (method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders })
+  }
+
+  // DETECTAR PETICIÓN DE CSS - Múltiples formas
+  const isCSSRequest =
+    pathname === "/css" || pathname.startsWith("/css") || searchParams.has("file") || url.search.includes("file=")
+
+  console.log("🎯 Is CSS Request:", isCSSRequest)
+
+  if (method === "GET" && isCSSRequest) {
+    console.log("📁 PROCESANDO PETICIÓN CSS")
+
+    const fileName = searchParams.get("file")
+    const licencia = searchParams.get("license")
+    const hash_tienda = searchParams.get("hash")
+
+    console.log("   File:", fileName)
+    console.log("   License:", licencia)
+    console.log("   Hash:", hash_tienda)
+
+    // 1. Verificar que se solicita un archivo
+    if (!fileName) {
+      console.log("❌ No file parameter")
+      return new Response("Missing file parameter", {
+        status: 400,
+        headers: corsHeaders,
+      })
     }
 
-    if (method === "OPTIONS") {
-      return new Response(null, { status: 200, headers: corsHeaders })
-    }
+    // 2. Verificar referer (temporal: permitir todo)
+    const refererValid = isFromShopify(request)
+    console.log("🔍 Referer valid:", refererValid)
 
-    // NUEVA FUNCIONALIDAD: Servir CSS protegido
-    if (method === "GET" && url.pathname === "/css") {
-      const fileName = url.searchParams.get("file")
-      const licencia = url.searchParams.get("license")
-      const hash_tienda = url.searchParams.get("hash")
-
-      console.log("📁 File:", fileName)
-      console.log("🔑 License:", licencia)
-      console.log("🏪 Hash:", hash_tienda)
-
-      // 1. Verificar parámetros básicos
-      if (!fileName) {
-        return new Response("Missing file parameter", {
-          status: 400,
-          headers: corsHeaders,
+    // 3. Validar licencia solo si se proporcionan todos los parámetros
+    if (licencia && hash_tienda) {
+      console.log("🔑 Validando licencia...")
+      try {
+        const validation = await validateLicenseQuick(licencia, hash_tienda, {
+          GOOGLE_SHEET_ID: "TU_SHEET_ID", // Reemplaza con tu ID real
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: "TU_EMAIL", // Reemplaza con tu email real
+          GOOGLE_PRIVATE_KEY: "TU_KEY", // Reemplaza con tu key real
         })
-      }
 
-      // 2. Verificar referer
-      if (!isFromShopify(request)) {
-        console.log("❌ Referer inválido")
-        return new Response("Access denied - Invalid referer", {
-          status: 403,
-          headers: corsHeaders,
-        })
-      }
-
-      // 3. Validar licencia (solo si se proporcionan parámetros)
-      if (licencia && hash_tienda) {
-        const validation = await validateLicenseQuick(licencia, hash_tienda, env)
         if (!validation.valid) {
           console.log("❌ Licencia inválida:", validation.error)
           return new Response(`License validation failed: ${validation.error}`, {
@@ -183,55 +183,79 @@ export default {
           })
         }
         console.log("✅ Licencia válida")
-      }
-
-      // 4. Fetch CSS desde tu CDN
-      const cdnUrl = `https://web-toolkit.pages.dev/css/${fileName}`
-      console.log("🌐 Fetching:", cdnUrl)
-
-      try {
-        const cdnResponse = await fetch(cdnUrl)
-
-        if (!cdnResponse.ok) {
-          console.log("❌ CDN error:", cdnResponse.status)
-          return new Response(`CDN file not found: ${cdnResponse.status}`, {
-            status: 404,
-            headers: corsHeaders,
-          })
-        }
-
-        const cssContent = await cdnResponse.text()
-        console.log("✅ CSS fetched successfully, length:", cssContent.length)
-
-        return new Response(cssContent, {
-          headers: {
-            "Content-Type": "text/css",
-            "Cache-Control": "public, max-age=1800",
-            ...corsHeaders,
-          },
-        })
       } catch (error) {
-        console.error("❌ Fetch error:", error)
-        return new Response(`Fetch error: ${error.message}`, {
-          status: 500,
+        console.log("❌ Error validando licencia:", error)
+        // Continuar sin validación por ahora
+      }
+    }
+
+    // 4. Fetch CSS desde CDN
+    const cdnUrl = `https://web-toolkit.pages.dev/css/${fileName}`
+    console.log("🌐 Fetching from CDN:", cdnUrl)
+
+    try {
+      const cdnResponse = await fetch(cdnUrl, {
+        headers: {
+          "User-Agent": "Cloudflare-Worker",
+        },
+      })
+
+      console.log("📡 CDN Response status:", cdnResponse.status)
+
+      if (!cdnResponse.ok) {
+        console.log("❌ CDN error:", cdnResponse.status, cdnResponse.statusText)
+        return new Response(`CDN file not found: ${cdnResponse.status} ${cdnResponse.statusText}`, {
+          status: 404,
           headers: corsHeaders,
         })
       }
-    }
 
-    // FUNCIONALIDAD EXISTENTE: Validación POST (mantener igual)
-    if (method === "POST") {
-      return validateLicense(request, env)
-    }
+      const cssContent = await cdnResponse.text()
+      console.log("✅ CSS fetched successfully, length:", cssContent.length)
 
-    // Para debugging - mostrar qué se recibió
-    return new Response(`Method: ${method}, Path: ${url.pathname}, Search: ${url.search}`, {
-      status: 404,
-      headers: corsHeaders,
+      return new Response(cssContent, {
+        headers: {
+          "Content-Type": "text/css",
+          "Cache-Control": "public, max-age=1800",
+          ...corsHeaders,
+        },
+      })
+    } catch (error) {
+      console.error("❌ Fetch error:", error)
+      return new Response(`Fetch error: ${error.message}`, {
+        status: 500,
+        headers: corsHeaders,
+      })
+    }
+  }
+
+  // FUNCIONALIDAD EXISTENTE: Validación POST
+  if (method === "POST") {
+    console.log("📮 POST Request - Validación de licencia")
+    return validateLicense(request, {
+      GOOGLE_SHEET_ID: "TU_SHEET_ID", // Reemplaza con tus valores reales
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: "TU_EMAIL",
+      GOOGLE_PRIVATE_KEY: "TU_KEY",
     })
-  },
-}
+  }
 
+  // Respuesta por defecto con información de debugging
+  console.log("❓ Unhandled request")
+  return new Response(
+    `
+DEBUG INFO:
+Method: ${method}
+Pathname: ${pathname}
+Search: ${url.search}
+Full URL: ${request.url}
+Is CSS Request: ${isCSSRequest}
+  `,
+    {
+      status: 404,
+      headers: { "Content-Type": "text/plain", ...corsHeaders },
+    },
+  )
+}
 
 export async function validateLicense(request, env) {
   const corsHeaders = {
